@@ -77,4 +77,18 @@ int forkskinny_sonicae_verify(const sonicae_key_t *ks,
                               const uint8_t *pt, size_t pt_len,
                               const uint8_t tag[SONICAE_TAG_LEN]);
 
-#endif /* FORKSKINNY_SONICAE_H */
+void forkskinny_sonicae_encrypt_auth(const sonicae_key_t *ks,
+                                     const uint8_t nonce[SONICAE_NONCE_LEN],
+                                     const uint8_t *ad, size_t ad_len,
+                                     const uint8_t *pt, size_t pt_len,
+                                     uint8_t *ct,
+                                     uint8_t tag[SONICAE_TAG_LEN]);
+
+int forkskinny_sonicae_decrypt_verify(const sonicae_key_t *ks,
+                                      const uint8_t nonce[SONICAE_NONCE_LEN],
+                                      const uint8_t *ad, size_t ad_len,
+                                      const uint8_t *ct, size_t ct_len,
+                                      const uint8_t tag[SONICAE_TAG_LEN],
+                                      uint8_t *pt);
+
+#endif
