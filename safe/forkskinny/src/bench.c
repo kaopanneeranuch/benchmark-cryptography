@@ -28,10 +28,6 @@ static const uint8_t bench_key[SAFE_KEY_LEN] = {
     0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
     0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
 };
-static const uint8_t bench_nonce[SAFE_NONCE_LEN] = {
-    0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,
-    0xa8,0xa9,0xaa,0xab
-};
 
 static void fill_pattern(uint8_t *buf, size_t len)
 {
@@ -58,20 +54,20 @@ void verify_correctness(void)
     forkskinny_safe_keygen(bench_key, &ks);
 
     /* encrypt + auth */
-    forkskinny_safe_encrypt_auth(&ks, bench_nonce,
-                                 ad_buf, AD_LEN,
-                                 pt_buf, MESSAGE_LEN,
-                                 ct_buf, tag_buf);
+    forkskinny_safe_encrypt(&ks,
+                            ad_buf, AD_LEN,
+                            pt_buf, MESSAGE_LEN,
+                            ct_buf, tag_buf);
 
     print_hex("PT[0..15]: ", pt_buf, 16);
     print_hex("CT[0..15]: ", ct_buf, 16);
     print_hex("TAG:       ", tag_buf, SAFE_TAG_LEN);
 
     /* decrypt + verify */
-    int rc = forkskinny_safe_decrypt_verify(&ks, bench_nonce,
-                                            ad_buf, AD_LEN,
-                                            ct_buf, MESSAGE_LEN,
-                                            tag_buf, dec_buf);
+    int rc = forkskinny_safe_decrypt(&ks,
+                                     ad_buf, AD_LEN,
+                                     ct_buf, MESSAGE_LEN,
+                                     tag_buf, dec_buf);
 
     print_hex("DEC[0..15]:", dec_buf, 16);
     printk("Decrypt+Verify: %s\n", rc == 0 ? "OK" : "FAIL");
@@ -116,15 +112,15 @@ static void bench_hash(void)
     forkskinny_safe_keygen(bench_key, &ks);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_safe_hash(&ks, bench_nonce,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN, tag_buf);
+        forkskinny_safe_auth(&ks,
+                     ad_buf, AD_LEN,
+                     pt_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_safe_hash(&ks, bench_nonce,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN, tag_buf);
+        forkskinny_safe_auth(&ks,
+                     ad_buf, AD_LEN,
+                     pt_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -144,15 +140,17 @@ static void bench_encrypt(void)
     forkskinny_safe_keygen(bench_key, &ks);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_safe_encrypt(&ks, bench_nonce,
-                                ad_buf, AD_LEN,
-                                pt_buf, MESSAGE_LEN, ct_buf);
+        forkskinny_safe_encrypt(&ks,
+                    ad_buf, AD_LEN,
+                    pt_buf, MESSAGE_LEN,
+                    ct_buf, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_safe_encrypt(&ks, bench_nonce,
-                                ad_buf, AD_LEN,
-                                pt_buf, MESSAGE_LEN, ct_buf);
+        forkskinny_safe_encrypt(&ks,
+                    ad_buf, AD_LEN,
+                    pt_buf, MESSAGE_LEN,
+                    ct_buf, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -170,20 +168,23 @@ static void bench_decrypt(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     forkskinny_safe_keygen(bench_key, &ks);
-    forkskinny_safe_encrypt(&ks, bench_nonce,
+    forkskinny_safe_encrypt(&ks,
                             ad_buf, AD_LEN,
-                            pt_buf, MESSAGE_LEN, ct_buf);
+                            pt_buf, MESSAGE_LEN,
+                            ct_buf, tag_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_safe_decrypt(&ks, bench_nonce,
-                                ad_buf, AD_LEN,
-                                ct_buf, MESSAGE_LEN, dec_buf);
+        forkskinny_safe_decrypt(&ks,
+                    ad_buf, AD_LEN,
+                    ct_buf, MESSAGE_LEN,
+                    tag_buf, dec_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_safe_decrypt(&ks, bench_nonce,
-                                ad_buf, AD_LEN,
-                                ct_buf, MESSAGE_LEN, dec_buf);
+        forkskinny_safe_decrypt(&ks,
+                    ad_buf, AD_LEN,
+                    ct_buf, MESSAGE_LEN,
+                    tag_buf, dec_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -201,20 +202,20 @@ static void bench_verify(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     forkskinny_safe_keygen(bench_key, &ks);
-    forkskinny_safe_hash(&ks, bench_nonce,
+    forkskinny_safe_auth(&ks,
                          ad_buf, AD_LEN,
                          pt_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_safe_verify(&ks, bench_nonce,
-                               ad_buf, AD_LEN,
-                               pt_buf, MESSAGE_LEN, tag_buf);
+        forkskinny_safe_verify(&ks,
+                       ad_buf, AD_LEN,
+                       pt_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_safe_verify(&ks, bench_nonce,
-                               ad_buf, AD_LEN,
-                               pt_buf, MESSAGE_LEN, tag_buf);
+        forkskinny_safe_verify(&ks,
+                       ad_buf, AD_LEN,
+                       pt_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
