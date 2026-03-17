@@ -4,18 +4,25 @@
 
 /* ═══════════════════════════════════════════════════════════════
  *  Constants
- *  ForkSkinny-128-256: n=128, k=128, t=128, e=4
+ *  ForkSkinny-128-256: n=128, k=128, t=128, e=2 bits
  *    SS_N     = 16 bytes  (n, FC block input size)
  *    SS_K     = 16 bytes  (k, key portion per block)
- *    SS_T     = 12 bytes  (t-e, tweak portion per block)
- *    SS_BLOCK = 44 bytes  (n+k+t-e, total per SuperSonic block)
+ *    SS_T     = 14 bytes  (t-e, tweak portion per block)
+ *    SS_BLOCK = 46 bytes  (n+k+t-e, total per SuperSonic payload block)
  *    SS_TAG   = 32 bytes  (2n, full SuperSonic tag)
+ *    SS_E_BITS = 2 bits   (reserved tweak bits)
+ *    SS_T_FULL = 15 bytes (full tweak size, including e bits rounded to byte)
  * ═══════════════════════════════════════════════════════════════ */
-#define SS_N        16
-#define SS_K        16
-#define SS_T        12
-#define SS_BLOCK   (SS_N + SS_K + SS_T)
-#define SS_TAG      32
+#define SS_N         16
+#define SS_K         16
+#define SS_T         14             /* t-e bytes carried in message stream */
+#define SS_E_BITS     2             /* e in bits */
+#define SS_T_FULL    (SS_T + ((SS_E_BITS + 7)/8))  /* 14 + 1 = 15 bytes */
+#define SS_PB        (SS_N + SS_K + SS_T)         /* 46 bytes payload per block */
+#define SS_BLOCK     (SS_N + SS_K + SS_T_FULL)    /* 48 bytes total per block */
+#define SS_TAG       32                         /* 2n bytes */
+#define SONICS_END_OF_MESSAGE 0x80
+
 
 /* ═══════════════════════════════════════════════════════════════
  *  Internal helpers
@@ -42,165 +49,130 @@ static void gf128_double(uint8_t x[SS_N])
  *  SuperSonic MAC internals
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Key expansion: FC(K, 0^t, 0^n) → (K_prime, mask)
- *   K_prime = left  output → derived key  (XORed into key slot each round)
- *   mask    = right output → input mask   (XORed into block input each round)
- */
-static void supersonic_key_expand(const uint8_t  key[SS_K],
-                                   uint8_t        K_prime[SS_K],
-                                   uint8_t        mask[SS_N])
+static void pull_ad_msg(uint8_t *dst,
+                        size_t len,
+                        const uint8_t *ad,
+                        size_t adlen,
+                        size_t *ad_off,
+                        const uint8_t *msg,
+                        size_t mlen,
+                        size_t *msg_off)
 {
-    uint8_t zero_tweak[SS_K];
-    uint8_t zero_input[SS_N];
-    memset(zero_tweak, 0, sizeof(zero_tweak));
-    memset(zero_input, 0, SS_N);
-    fork_encrypt_full(key, zero_tweak, zero_input, K_prime, mask);
+    size_t written = 0;
+    while (written < len) {
+        if (*ad_off < adlen) {
+            size_t take = adlen - *ad_off;
+            if (take > len - written)
+                take = len - written;
+            if (take > 0)
+                memcpy(dst + written, ad + *ad_off, take);
+            *ad_off += take;
+            written += take;
+        } else {
+            size_t take = mlen - *msg_off;
+            if (take > len - written)
+                take = len - written;
+            if (take > 0)
+                memcpy(dst + written, msg + *msg_off, take);
+            *msg_off += take;
+            written += take;
+        }
+    }
 }
 
-/* One SuperSonic main-loop round.
- *
- * Block layout (SS_BLOCK = 44 bytes):
- *   P[0      .. N-1      ] = M3i   → FC block input
- *   P[N      .. N+K-1    ] = M3i+1 → XORed into key slot
- *   P[N+K    .. N+K+T-1  ] = M3i+2 → XORed into tweak slot
- *
- * Three accumulators updated:
- *   chain_kt[0..K-1]   = XOR checksum of M3i+1  (k-chain)
- *   chain_m [0..N-1]   = doubling accumulation of FC right output (m-chain)
- *   chain_kt[K..K+T-1] = XOR of (FC_right XOR M3i+2)           (t-chain)
- *
- * FC call uses reduced rounds, right output only.
- */
-static void supersonic_round(
-        const uint8_t  K_prime[SS_K],
-        const uint8_t  mask[SS_N],
-        const uint8_t *P,
-        uint8_t        chain_kt[SS_K + SS_T + 1],
-        uint8_t        chain_m[SS_N],
-        uint8_t        fc_right[SS_N],
-        uint16_t       round_nr)
-{
-    const uint8_t *M3i   = P;
-    const uint8_t *M3i_1 = P + SS_N;
-    const uint8_t *M3i_2 = P + SS_N + SS_K;
-
-    /* k-chain: accumulate key portion before FC call */
-    xor_into(chain_kt, M3i_1, SS_K);
-
-    /* Build FC inputs */
-    uint8_t fc_input[SS_N];
-    uint8_t fc_key  [SS_K];
-    uint8_t fc_tweak[SS_K];
-    memset(fc_tweak, 0, sizeof(fc_tweak));
-
-    /* fc_input = M3i XOR mask */
-    memcpy(fc_input, M3i, SS_N);
-    xor_into(fc_input, mask, SS_N);
-
-    /* fc_key = M3i+1 XOR K_prime */
-    memcpy(fc_key, M3i_1, SS_K);
-    xor_into(fc_key, K_prime, SS_K);
-
-    /* fc_tweak[0..T-1] = M3i+2, counter in last bytes, last 4 bits = 0 */
-    memcpy(fc_tweak, M3i_2, SS_T);
-    fc_tweak[SS_T]     = (uint8_t)((round_nr + 1) & 0xff);
-    fc_tweak[SS_T + 1] = (uint8_t)(((round_nr + 1) & 0x0f00) >> 4);
-
-    /* FC: reduced rounds, right output only */
-    fork_encrypt_right(fc_key, fc_tweak, fc_input, fc_right);
-
-    /* m-chain: XOR fc_right then double in GF(2^128) */
-    xor_into(chain_m, fc_right, SS_N);
-    gf128_double(chain_m);
-
-    /* t-chain: (fc_right XOR M3i+2) accumulated into chain_kt[K..K+T] */
-    uint8_t t_contrib[SS_T];
-    memcpy(t_contrib, fc_right, SS_T);
-    xor_into(t_contrib, M3i_2, SS_T);
-    xor_into(chain_kt + SS_K, t_contrib, SS_T);
-}
-
-/* ═══════════════════════════════════════════════════════════════
- *  SuperSonic MAC
- *
- *  Processes Pad(AD) ∥ Pad(M) as a single flat input.
- *  tag[0 ..N-1 ] = X  (left  output of final FC) → auth tag / R for GCTR
- *  tag[N ..2N-1] = Y  (right output of final FC) → nonce N for GCTR
- * ═══════════════════════════════════════════════════════════════ */
 void forkskinny_sonicae_supersonic(
         const uint8_t  key[SS_K],
         const uint8_t *ad,  size_t adlen,
         const uint8_t *msg, size_t mlen,
-        uint8_t        tag[SS_TAG])
+        uint8_t       *out_tag)
 {
-    uint8_t K_prime[SS_K];
-    uint8_t mask   [SS_N];
-    supersonic_key_expand(key, K_prime, mask);
-
-    uint8_t chain_m [SS_N];
-    uint8_t chain_kt[SS_K + SS_K];
+    uint8_t chain_k[SS_K] = {0};
+    uint8_t chain_m[SS_N] = {0};
+    uint8_t chain_t[SS_T_FULL] = {0};
     uint8_t fc_right[SS_N];
-    memset(chain_m,  0, SS_N);
-    memset(chain_kt, 0, SS_K + SS_K);
 
-    size_t   total     = adlen + mlen;
-    size_t   ad_off    = 0;
-    size_t   msg_off   = 0;
-    size_t   remaining = total;
-    uint16_t round_nr  = 0;
+    const size_t total = adlen + mlen;
+    const size_t res = total % SS_PB;
+    const int res_flag = (res != 0) ? 1 : 0;
+    const int numP = (total == 0) ? 0 : ((int)(total / SS_PB) - 1 + res_flag);
 
-    while (remaining > 0) {
-        uint8_t P[SS_BLOCK];
-        size_t  chunk   = (remaining >= SS_BLOCK) ? SS_BLOCK : remaining;
-        int     is_last = (chunk < SS_BLOCK) || (remaining == SS_BLOCK);
+    size_t ad_off = 0;
+    size_t msg_off = 0;
 
-        /* Fill P sequentially from AD then MSG */
-        size_t filled = 0;
-        while (filled < chunk) {
-            if (ad_off < adlen) {
-                size_t take = adlen - ad_off;
-                if (take > chunk - filled) take = chunk - filled;
-                memcpy(P + filled, ad + ad_off, take);
-                ad_off  += take;
-                filled  += take;
-            } else {
-                size_t take = mlen - msg_off;
-                if (take > chunk - filled) take = chunk - filled;
-                memcpy(P + filled, msg + msg_off, take);
-                msg_off += take;
-                filled  += take;
-            }
-        }
+    // Process each full block
+    for (int i = 0; i < numP; ++i) {
+        uint8_t P[SS_BLOCK + 2] = {0};  // +2 for 12-bit block counter
 
-        /* 10* padding on last block if incomplete */
-        if (is_last && chunk < SS_BLOCK) {
-            P[chunk] = 0x80;
-            memset(P + chunk + 1, 0, SS_BLOCK - chunk - 1);
-        }
+        // Fill payload from AD || message
+        pull_ad_msg(P, SS_PB, ad, adlen, &ad_off, msg, mlen, &msg_off);
 
-        supersonic_round(K_prime, mask, P,
-                         chain_kt, chain_m, fc_right, round_nr);
-        round_nr++;
-        remaining -= chunk;
+        // Encode 12-bit block index
+        P[SS_N + SS_K + SS_T]     = (uint8_t)((i + 1) & 0xFF);
+        P[SS_N + SS_K + SS_T + 1] = (uint8_t)(((i + 1) >> 8) & 0x0F);
+
+        // XOR key into the payload
+        xor_into(P + SS_N, key, SS_K);
+
+        // Prepare tweakey for ForkSkinny right branch
+        uint8_t tweak_padded[16] = {0};
+        memcpy(tweak_padded, P + SS_N, SS_T_FULL);
+
+        fork_encrypt_right(key, tweak_padded, P, fc_right);
+
+        // Update chains
+        xor_into(chain_k, P + SS_N, SS_K);
+        xor_into(chain_m, fc_right, SS_N);
+        gf128_double(chain_m);
+
+        uint8_t tbuf[SS_T_FULL];
+        memcpy(tbuf, fc_right, SS_T_FULL);
+        xor_into(tbuf, P + SS_N + SS_K, SS_T_FULL);
+        xor_into(chain_t, tbuf, SS_T_FULL);
     }
 
-    /* Finalization */
-    /* padding indicator: 01 = no padding needed, 11 = padding was added */
-    chain_kt[SS_K + SS_T] = ((total % SS_BLOCK) == 0) ? 0x01 : 0x03;
+    // Process final block (padding + domain separation)
+    {
+        uint8_t P[SS_BLOCK + 2] = {0};
 
-    xor_into(chain_kt, K_prime, SS_K);
-    xor_into(chain_m,  mask,    SS_N);
+        size_t last_len = (total == 0) ? 0 : (res_flag ? res : SS_PB);
+        pull_ad_msg(P, last_len, ad, adlen, &ad_off, msg, mlen, &msg_off);
 
-    /* Final FC: full rounds, both outputs
-     *   key   = chain_kt[0..K]
-     *   tweak = chain_kt[K..K+T+1]
-     *   input = chain_m
-     */
-    fork_encrypt_full(chain_kt,
-                      chain_kt + SS_K,
-                      chain_m,
-                      tag,          /* X = left  output */
-                      tag + SS_N);  /* Y = right output */
+        if (res_flag)
+            P[last_len] = SONICS_END_OF_MESSAGE; // padding byte
+
+        const int last_idx = numP + 1;
+        P[SS_N + SS_K + SS_T]     = (uint8_t)(last_idx & 0xFF);
+        P[SS_N + SS_K + SS_T + 1] = (uint8_t)((last_idx >> 8) & 0x0F);
+
+        xor_into(P + SS_N, key, SS_K);
+
+        uint8_t tweak_padded[16] = {0};
+        memcpy(tweak_padded, P + SS_N, SS_T_FULL);
+
+        fork_encrypt_right(key, tweak_padded, P, fc_right);
+
+        xor_into(chain_k, P + SS_N, SS_K);
+        xor_into(chain_m, fc_right, SS_N);
+        gf128_double(chain_m);
+
+        uint8_t tbuf[SS_T_FULL];
+        memcpy(tbuf, fc_right, SS_T_FULL);
+        xor_into(tbuf, P + SS_N + SS_K, SS_T_FULL);
+        xor_into(chain_t, tbuf, SS_T_FULL);
+
+        // Domain separation: last 2 bits of tweak
+        chain_t[SS_T_FULL - 1] &= 0xFC;
+        chain_t[SS_T_FULL - 1] |= (0x01 + 0x02 * res_flag);
+    }
+
+    // Final XORs before ForkSkinny full encryption
+    xor_into(chain_k, key, SS_K);
+
+    uint8_t final_tweak[16] = {0};
+    memcpy(final_tweak, chain_t, SS_T_FULL);
+
+    // ForkSkinny full encryption to produce tag
+    fork_encrypt_full(chain_k, final_tweak, chain_m, out_tag, out_tag + SS_N);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -269,35 +241,24 @@ static void gctr_crypt(const uint8_t  key[SS_K],
  *  Public API
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Key setup */
 void forkskinny_sonicae_keygen(const uint8_t  key[SONICAE_KEY_LEN],
                                 sonicae_key_t *ks)
 {
     memcpy(ks->key, key, SONICAE_KEY_LEN);
 }
 
-/* ── Auth only ──────────────────────────────────────────────────
- *
- *  SuperSonic(K, Pad(AD) ∥ Pad(M)) → tag (32 bytes)
- *    tag[0..15]  = X = R  used as GCTR IV
- *    tag[16..31] = Y = N  used as GCTR nonce
- * ────────────────────────────────────────────────────────────── */
 void forkskinny_sonicae_auth(
         const sonicae_key_t *ks,
         const uint8_t       *ad,   size_t adlen,
         const uint8_t       *pt,   size_t ptlen,
-        uint8_t              tag[SS_TAG])
+    uint8_t             *tag)
 {
     forkskinny_sonicae_supersonic(ks->key, ad, adlen, pt, ptlen, tag);
 }
 
-/* ── Encrypt only ───────────────────────────────────────────────
- *
- *  GCTR'2-3(K, N=tag[16..31], R=tag[0..15], pt) → ct
- * ────────────────────────────────────────────────────────────── */
 void forkskinny_sonicae_encrypt(
         const sonicae_key_t *ks,
-        const uint8_t        tag[SS_TAG],
+    const uint8_t       *tag,
         const uint8_t       *pt,   size_t ptlen,
         uint8_t             *ct)
 {
@@ -306,13 +267,9 @@ void forkskinny_sonicae_encrypt(
     gctr_crypt(ks->key, N, R, pt, ptlen, ct);
 }
 
-/* ── Decrypt only ───────────────────────────────────────────────
- *
- *  CTR is symmetric — identical to encrypt.
- * ────────────────────────────────────────────────────────────── */
 void forkskinny_sonicae_decrypt(
         const sonicae_key_t *ks,
-        const uint8_t        tag[SS_TAG],
+    const uint8_t       *tag,
         const uint8_t       *ct,   size_t ctlen,
         uint8_t             *pt)
 {
@@ -321,17 +278,11 @@ void forkskinny_sonicae_decrypt(
     gctr_crypt(ks->key, N, R, ct, ctlen, pt);
 }
 
-/* ── Verify only ────────────────────────────────────────────────
- *
- *  Recomputes SuperSonic(K, Pad(AD) ∥ Pad(pt)) → tag'
- *  Constant-time compares tag' == received tag (full 32 bytes).
- *  Returns 0 on success, -1 on failure.
- * ────────────────────────────────────────────────────────────── */
 int forkskinny_sonicae_verify(
         const sonicae_key_t *ks,
         const uint8_t       *ad,   size_t adlen,
         const uint8_t       *pt,   size_t ptlen,
-        const uint8_t        tag[SS_TAG])
+    const uint8_t       *tag)
 {
     uint8_t tag_r[SS_TAG];
     forkskinny_sonicae_supersonic(ks->key, ad, adlen, pt, ptlen, tag_r);
@@ -343,37 +294,22 @@ int forkskinny_sonicae_verify(
     return (diff == 0) ? 0 : -1;
 }
 
-/* ── Encrypt + Auth (combined) ──────────────────────────────────
- *
- *  Pass 1: SuperSonic(K, Pad(AD) ∥ Pad(pt)) → tag
- *  Pass 2: GCTR'2-3(K, N=tag[16..31], R=tag[0..15], pt) → ct
- *  Output: ct, tag (both 32-byte tag halves transmitted)
- * ────────────────────────────────────────────────────────────── */
 void forkskinny_sonicae_encrypt_auth(
         const sonicae_key_t *ks,
         const uint8_t       *ad,   size_t adlen,
         const uint8_t       *pt,   size_t ptlen,
         uint8_t             *ct,
-        uint8_t              tag[SS_TAG])
+    uint8_t             *tag)
 {
     forkskinny_sonicae_auth(ks, ad, adlen, pt, ptlen, tag);
     forkskinny_sonicae_encrypt(ks, tag, pt, ptlen, ct);
 }
 
-/* ── Decrypt + Verify (combined) ────────────────────────────────
- *
- *  Step 1: GCTR'2-3(K, N=tag[16..31], R=tag[0..15], ct) → pt
- *  Step 2: SuperSonic(K, Pad(AD) ∥ Pad(pt)) → tag'
- *  Step 3: Constant-time compare tag' == tag
- *  Step 4: Wipe pt on failure
- *  Returns 0 on success, -1 on failure.
- * ────────────────────────────────────────────────────────────── */
 int forkskinny_sonicae_decrypt_verify(
         const sonicae_key_t *ks,
         const uint8_t       *ad,   size_t adlen,
         const uint8_t       *ct,   size_t ctlen,
-        const uint8_t        tag[SS_TAG],
-        uint8_t             *pt)
+        const uint8_t       *tag,  uint8_t *pt)
 {
     forkskinny_sonicae_decrypt(ks, tag, ct, ctlen, pt);
  
