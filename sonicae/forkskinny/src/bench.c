@@ -22,6 +22,7 @@ static const uint8_t bench_key[SONICAE_KEY_LEN] = {
     0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
     0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
 };
+
 static const uint8_t bench_nonce[SONICAE_NONCE_LEN] = {
     0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,
     0xa8,0xa9,0xaa,0xab
@@ -49,21 +50,21 @@ void verify_correctness(void)
     /* keygen */
     forkskinny_sonicae_keygen(bench_key, &ks);
 
-    /* combined encrypt + auth */
-    forkskinny_sonicae_encrypt_auth(&ks, bench_nonce,
-                                    NULL, 0,
-                                    pt_buf, MESSAGE_LEN,
-                                    ct_buf, tag_buf);
+        /* combined encrypt + auth */
+        forkskinny_sonicae_encrypt_auth(&ks,
+                                        NULL, 0,
+                                        pt_buf, MESSAGE_LEN,
+                                        ct_buf, tag_buf);
 
     print_hex("PT[0..15]: ", pt_buf, 16);
     print_hex("CT[0..15]: ", ct_buf, 16);
     print_hex("TAG:       ", tag_buf, SONICAE_TAG_LEN);
 
     /* combined decrypt + verify */
-    int rc = forkskinny_sonicae_decrypt_verify(&ks, bench_nonce,
-                                               NULL, 0,
-                                               ct_buf, MESSAGE_LEN,
-                                               tag_buf, dec_buf);
+        int rc = forkskinny_sonicae_decrypt_verify(&ks,
+                                                   NULL, 0,
+                                                   ct_buf, MESSAGE_LEN,
+                                                   tag_buf, dec_buf);
 
     print_hex("DEC:       ", dec_buf, 16);
 
@@ -110,11 +111,11 @@ static void bench_encrypt(void)
     forkskinny_sonicae_keygen(bench_key, &ks);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_sonicae_encrypt(&ks, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+        forkskinny_sonicae_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_sonicae_encrypt(&ks, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+        forkskinny_sonicae_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -132,18 +133,18 @@ static void bench_auth(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     forkskinny_sonicae_keygen(bench_key, &ks);
-    forkskinny_sonicae_encrypt(&ks, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+    /* produce tag and ciphertext for auth benchmark */
+    forkskinny_sonicae_auth(&ks, NULL, 0, pt_buf, MESSAGE_LEN, tag_buf);
+    forkskinny_sonicae_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_sonicae_auth(&ks, bench_nonce, NULL, 0,
-                                ct_buf, MESSAGE_LEN,
-                                pt_buf, MESSAGE_LEN, tag_buf);
+        forkskinny_sonicae_auth(&ks, NULL, 0,
+                    pt_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_sonicae_auth(&ks, bench_nonce, NULL, 0,
-                                ct_buf, MESSAGE_LEN,
-                                pt_buf, MESSAGE_LEN, tag_buf);
+        forkskinny_sonicae_auth(&ks, NULL, 0,
+                    pt_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -161,15 +162,15 @@ static void bench_decrypt(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     forkskinny_sonicae_keygen(bench_key, &ks);
-    forkskinny_sonicae_encrypt_auth(&ks, bench_nonce, NULL, 0,
+    forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_sonicae_decrypt(&ks, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
+        forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_sonicae_decrypt(&ks, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
+        forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -187,20 +188,18 @@ static void bench_auth_check(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     forkskinny_sonicae_keygen(bench_key, &ks);
-    forkskinny_sonicae_encrypt_auth(&ks, bench_nonce, NULL, 0,
+    forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
-    forkskinny_sonicae_decrypt(&ks, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
+    forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_sonicae_verify(&ks, bench_nonce, NULL, 0,
-                                  ct_buf, MESSAGE_LEN,
-                                  dec_buf, MESSAGE_LEN, tag_buf);
+          forkskinny_sonicae_verify(&ks, NULL, 0,
+                                             dec_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        (void)forkskinny_sonicae_verify(&ks, bench_nonce, NULL, 0,
-                                        ct_buf, MESSAGE_LEN,
-                                        dec_buf, MESSAGE_LEN, tag_buf);
+          (void)forkskinny_sonicae_verify(&ks, NULL, 0,
+                                                     dec_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;

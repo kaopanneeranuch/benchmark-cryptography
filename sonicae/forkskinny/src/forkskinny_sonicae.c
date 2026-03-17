@@ -50,7 +50,7 @@ static void supersonic_key_expand(const uint8_t  key[SS_K],
                                    uint8_t        K_prime[SS_K],
                                    uint8_t        mask[SS_N])
 {
-    uint8_t zero_tweak[SS_K + SS_T];
+    uint8_t zero_tweak[SS_K];
     uint8_t zero_input[SS_N];
     memset(zero_tweak, 0, sizeof(zero_tweak));
     memset(zero_input, 0, SS_N);
@@ -90,7 +90,8 @@ static void supersonic_round(
     /* Build FC inputs */
     uint8_t fc_input[SS_N];
     uint8_t fc_key  [SS_K];
-    uint8_t fc_tweak[SS_K + SS_T + 1];
+    uint8_t fc_tweak[SS_K];
+    memset(fc_tweak, 0, sizeof(fc_tweak));
 
     /* fc_input = M3i XOR mask */
     memcpy(fc_input, M3i, SS_N);
@@ -137,10 +138,10 @@ void forkskinny_sonicae_supersonic(
     supersonic_key_expand(key, K_prime, mask);
 
     uint8_t chain_m [SS_N];
-    uint8_t chain_kt[SS_K + SS_T + 1];
+    uint8_t chain_kt[SS_K + SS_K];
     uint8_t fc_right[SS_N];
     memset(chain_m,  0, SS_N);
-    memset(chain_kt, 0, SS_K + SS_T + 1);
+    memset(chain_kt, 0, SS_K + SS_K);
 
     size_t   total     = adlen + mlen;
     size_t   ad_off    = 0;

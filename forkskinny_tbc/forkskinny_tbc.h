@@ -10,6 +10,18 @@ void fork_encrypt(const uint8_t key[16],
                   uint8_t c0[16],
                   uint8_t c1[16]);
 
+/* Convenience wrappers implemented in forkskinny_tbc.c */
+void fork_encrypt_full(const uint8_t key[16],
+                       const uint8_t tweak[16],
+                       const uint8_t input[16],
+                       uint8_t out_left[16],
+                       uint8_t out_right[16]);
+
+void fork_encrypt_right(const uint8_t key[16],
+                        const uint8_t tweak[16],
+                        const uint8_t input[16],
+                        uint8_t out_right[16]);
+
 void fork_decrypt(const uint8_t key[16],
                   const uint8_t tweak[16],
                   const uint8_t c0[16],

@@ -19,7 +19,7 @@
 
 #define SONICAE_KEY_LEN    16
 #define SONICAE_NONCE_LEN  12
-#define SONICAE_TAG_LEN    16
+#define SONICAE_TAG_LEN    32
 #define SONICAE_BLOCK_LEN  16
 
 /* Expanded key (trivial for ForkSkinny – just stores the raw key) */
@@ -38,9 +38,11 @@ void forkskinny_sonicae_keygen(const uint8_t key[SONICAE_KEY_LEN],
 /*
  * Encrypt plaintext (confidentiality only – no tag produced).
  * pt and ct may NOT overlap.  len may be any value (including non-block-aligned).
+ * This implementation expects the 32-byte SuperSonic tag as input
+ * (produced by `forkskinny_sonicae_auth`).
  */
 void forkskinny_sonicae_encrypt(const sonicae_key_t *ks,
-                                const uint8_t nonce[SONICAE_NONCE_LEN],
+                                const uint8_t tag[],
                                 const uint8_t *pt, size_t pt_len,
                                 uint8_t *ct);
 
@@ -50,19 +52,17 @@ void forkskinny_sonicae_encrypt(const sonicae_key_t *ks,
  * plus AD processing.  For benchmarking we recompute from scratch.
  */
 void forkskinny_sonicae_auth(const sonicae_key_t *ks,
-                             const uint8_t nonce[SONICAE_NONCE_LEN],
                              const uint8_t *ad, size_t ad_len,
-                             const uint8_t *ct, size_t ct_len,
                              const uint8_t *pt, size_t pt_len,
-                             uint8_t tag[SONICAE_TAG_LEN]);
+                             uint8_t tag[]);
 
 /*
  * Decrypt ciphertext (no tag check).
  * ct and pt may NOT overlap.
  * Returns 0 on success.
  */
-int forkskinny_sonicae_decrypt(const sonicae_key_t *ks,
-                               const uint8_t nonce[SONICAE_NONCE_LEN],
+void forkskinny_sonicae_decrypt(const sonicae_key_t *ks,
+                               const uint8_t tag[],
                                const uint8_t *ct, size_t ct_len,
                                uint8_t *pt);
 
@@ -71,24 +71,20 @@ int forkskinny_sonicae_decrypt(const sonicae_key_t *ks,
  * Returns 0 if tag is valid, -1 otherwise.
  */
 int forkskinny_sonicae_verify(const sonicae_key_t *ks,
-                              const uint8_t nonce[SONICAE_NONCE_LEN],
                               const uint8_t *ad, size_t ad_len,
-                              const uint8_t *ct, size_t ct_len,
                               const uint8_t *pt, size_t pt_len,
-                              const uint8_t tag[SONICAE_TAG_LEN]);
+                              const uint8_t tag[]);
 
 void forkskinny_sonicae_encrypt_auth(const sonicae_key_t *ks,
-                                     const uint8_t nonce[SONICAE_NONCE_LEN],
                                      const uint8_t *ad, size_t ad_len,
                                      const uint8_t *pt, size_t pt_len,
                                      uint8_t *ct,
-                                     uint8_t tag[SONICAE_TAG_LEN]);
+                                     uint8_t tag[]);
 
 int forkskinny_sonicae_decrypt_verify(const sonicae_key_t *ks,
-                                      const uint8_t nonce[SONICAE_NONCE_LEN],
                                       const uint8_t *ad, size_t ad_len,
                                       const uint8_t *ct, size_t ct_len,
-                                      const uint8_t tag[SONICAE_TAG_LEN],
+                                      const uint8_t tag[],
                                       uint8_t *pt);
 
 #endif
