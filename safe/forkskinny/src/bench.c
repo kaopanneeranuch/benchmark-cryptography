@@ -103,6 +103,33 @@ static void bench_keygen(void)
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
 
+// static void bench_hash(void)
+// {
+//     timing_t start, end;
+//     uint64_t total_c = 0, total_ns = 0;
+
+//     fill_pattern(pt_buf, MESSAGE_LEN);
+//     forkskinny_safe_keygen(bench_key, &ks);
+
+//     for (int i = 0; i < WARMUP_ITERS; i++)
+//         forkskinny_safe_auth(&ks,
+//                      ad_buf, AD_LEN,
+//                      pt_buf, MESSAGE_LEN, tag_buf);
+
+//     for (int i = 0; i < BENCH_ITERS; i++) {
+//         start = timing_counter_get();
+//         forkskinny_safe_auth(&ks,
+//                      ad_buf, AD_LEN,
+//                      pt_buf, MESSAGE_LEN, tag_buf);
+//         end = timing_counter_get();
+//         uint64_t c = timing_cycles_get(&start, &end);
+//         total_c  += c;
+//         total_ns += timing_cycles_to_ns(c);
+//     }
+//     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "hash (tag)",
+//            (unsigned long long)(total_c / BENCH_ITERS),
+//            (unsigned long long)(total_ns / BENCH_ITERS));
+// }
 static void bench_hash(void)
 {
     timing_t start, end;
@@ -111,24 +138,43 @@ static void bench_hash(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     forkskinny_safe_keygen(bench_key, &ks);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        forkskinny_safe_reset_counters();
         forkskinny_safe_auth(&ks,
                      ad_buf, AD_LEN,
                      pt_buf, MESSAGE_LEN, tag_buf);
+    }
+
+    uint64_t total_gf = 0;
+    uint64_t total_tprf = 0;
+    uint64_t total_blocks = 0;
 
     for (int i = 0; i < BENCH_ITERS; i++) {
+        forkskinny_safe_reset_counters();
+
         start = timing_counter_get();
         forkskinny_safe_auth(&ks,
                      ad_buf, AD_LEN,
                      pt_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
+
+        total_gf     += forkskinny_safe_get_gf256_mul_count();
+        total_tprf   += forkskinny_safe_get_tprf_eval_count();
+        total_blocks += forkskinny_safe_get_absorbed_block_count();
     }
+
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "hash (tag)",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+
+    printk("    SAFE counters: gf256_mul=%llu, tprf_eval=%llu, absorb_blocks=%llu\n",
+           (unsigned long long)(total_gf / BENCH_ITERS),
+           (unsigned long long)(total_tprf / BENCH_ITERS),
+           (unsigned long long)(total_blocks / BENCH_ITERS));
 }
 
 static void bench_encrypt(void)

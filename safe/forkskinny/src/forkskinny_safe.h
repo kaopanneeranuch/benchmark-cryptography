@@ -45,5 +45,10 @@ void forkskinny_safe_fenc_decrypt(const safe_key_t *ks,
                                   const uint8_t tag[SAFE_TAG_LEN],
                                   const uint8_t *ct, size_t ctlen,
                                   uint8_t *pt);
+                                  
+void forkskinny_safe_reset_counters(void);
+uint64_t forkskinny_safe_get_gf256_mul_count(void);
+uint64_t forkskinny_safe_get_tprf_eval_count(void);
+uint64_t forkskinny_safe_get_absorbed_block_count(void);
 
 #endif

@@ -9,6 +9,35 @@
 #define SAFE_2N      32
 #define SAFE_TAG_LEN 32
 
+
+// Add counters
+
+static uint64_t g_safe_gf256_mul_count = 0;
+static uint64_t g_safe_tprf_eval_count = 0;
+static uint64_t g_safe_absorbed_block_count = 0;
+
+void forkskinny_safe_reset_counters(void)
+{
+    g_safe_gf256_mul_count = 0;
+    g_safe_tprf_eval_count = 0;
+    g_safe_absorbed_block_count = 0;
+}
+
+uint64_t forkskinny_safe_get_gf256_mul_count(void)
+{
+    return g_safe_gf256_mul_count;
+}
+
+uint64_t forkskinny_safe_get_tprf_eval_count(void)
+{
+    return g_safe_tprf_eval_count;
+}
+
+uint64_t forkskinny_safe_get_absorbed_block_count(void)
+{
+    return g_safe_absorbed_block_count;
+}
+
 /* We instantiate SAFE with a 128-bit tweak and reserve 1 bit for domain
  * separation, leaving 127 bits for V.
  *
@@ -124,6 +153,10 @@ static void tprf_eval_32(const uint8_t key[SAFE_KEY_LEN],
                          uint8_t out[32])
 {
     uint8_t tweak[16];
+
+    //counter
+    g_safe_tprf_eval_count++;
+
     make_tweak_from_V(tweak, domain_bit, V);
     fork_encrypt_full(key, tweak, U, out, out + 16);
 }
@@ -157,6 +190,9 @@ static void gf256_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
     uint8_t z[32] = {0};
     uint8_t v[32];
 
+    //counter
+    g_safe_gf256_mul_count++;
+
     memcpy(v, a, 32);
 
     for (size_t i = 0; i < 32; i++) {
@@ -184,6 +220,10 @@ static void sfmac_absorb_block(uint8_t T[32], const uint8_t L[32],
                                const uint8_t block[32])
 {
     uint8_t tmp[32];
+
+    //counter
+    g_safe_absorbed_block_count++;
+    
     xor_block(tmp, T, block, 32);
     gf256_mul(T, tmp, L);
 }
