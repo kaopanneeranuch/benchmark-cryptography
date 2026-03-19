@@ -137,25 +137,32 @@ static void bench_encrypt(void)
     uint64_t total_c = 0, total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
     forkskinny_safe_keygen(bench_key, &ks);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_safe_encrypt(&ks,
-                    ad_buf, AD_LEN,
-                    pt_buf, MESSAGE_LEN,
-                    ct_buf, tag_buf);
+    /* Precompute tag once so we measure FEnc only */
+    forkskinny_safe_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        forkskinny_safe_fenc_encrypt(&ks,
+                                     tag_buf,
+                                     pt_buf, MESSAGE_LEN,
+                                     ct_buf);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_safe_encrypt(&ks,
-                    ad_buf, AD_LEN,
-                    pt_buf, MESSAGE_LEN,
-                    ct_buf, tag_buf);
+        forkskinny_safe_fenc_encrypt(&ks,
+                                     tag_buf,
+                                     pt_buf, MESSAGE_LEN,
+                                     ct_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
+
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "encrypt",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
@@ -167,29 +174,36 @@ static void bench_decrypt(void)
     uint64_t total_c = 0, total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
     forkskinny_safe_keygen(bench_key, &ks);
-    forkskinny_safe_encrypt(&ks,
-                            ad_buf, AD_LEN,
-                            pt_buf, MESSAGE_LEN,
-                            ct_buf, tag_buf);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
-        forkskinny_safe_decrypt(&ks,
-                    ad_buf, AD_LEN,
-                    ct_buf, MESSAGE_LEN,
-                    tag_buf, dec_buf);
+    /* Precompute tag and ciphertext once so we measure FEnc only */
+    forkskinny_safe_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+    forkskinny_safe_fenc_encrypt(&ks,
+                                 tag_buf,
+                                 pt_buf, MESSAGE_LEN,
+                                 ct_buf);
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        forkskinny_safe_fenc_decrypt(&ks,
+                                     tag_buf,
+                                     ct_buf, MESSAGE_LEN,
+                                     dec_buf);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        forkskinny_safe_decrypt(&ks,
-                    ad_buf, AD_LEN,
-                    ct_buf, MESSAGE_LEN,
-                    tag_buf, dec_buf);
+        forkskinny_safe_fenc_decrypt(&ks,
+                                     tag_buf,
+                                     ct_buf, MESSAGE_LEN,
+                                     dec_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
+
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "decrypt",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));

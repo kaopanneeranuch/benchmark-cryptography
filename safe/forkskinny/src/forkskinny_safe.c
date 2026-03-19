@@ -350,3 +350,19 @@ int forkskinny_safe_decrypt(const safe_key_t *ks,
     ct_memzero(computed, sizeof(computed));
     return 0;
 }
+
+void forkskinny_safe_fenc_encrypt(const safe_key_t *ks,
+                                  const uint8_t tag[SAFE_TAG_LEN],
+                                  const uint8_t *pt, size_t ptlen,
+                                  uint8_t *ct)
+{
+    fenc_crypt(ks->key, tag, pt, ptlen, ct);
+}
+
+void forkskinny_safe_fenc_decrypt(const safe_key_t *ks,
+                                  const uint8_t tag[SAFE_TAG_LEN],
+                                  const uint8_t *ct, size_t ctlen,
+                                  uint8_t *pt)
+{
+    fenc_crypt(ks->key, tag, ct, ctlen, pt);
+}
