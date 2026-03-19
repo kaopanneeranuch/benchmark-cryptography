@@ -22,37 +22,6 @@ void fork_encrypt(const uint8_t key[16],
     forkskinny_128_256_encrypt(tweakey, c0, c1, input);
 }
 
-/* fork_encrypt_full — alias of fork_encrypt for clarity in SonicAE */
-void fork_encrypt_full(const uint8_t key[16],
-                       const uint8_t tweak[16],
-                       const uint8_t input[16],
-                       uint8_t out_left[16],
-                       uint8_t out_right[16])
-{
-    fork_encrypt(key, tweak, input, out_left, out_right);
-}
-
-/* fork_encrypt_right — reduced rounds, right output only
- * Used by: SuperSonic main loop
- *
- * ForkSkinny has a "forward-only" mode that computes only the right
- * branch using fewer rounds (ROUNDS_BEFORE + ROUNDS_AFTER instead of
- * ROUNDS_BEFORE + 2*ROUNDS_AFTER).
- * We pass NULL for the left output to signal right-only computation.
- */
-void fork_encrypt_right(const uint8_t key[16],
-                        const uint8_t tweak[16],
-                        const uint8_t input[16],
-                        uint8_t out_right[16])
-{
-    uint8_t tweakey[32];
-    memcpy(tweakey,      tweak, 16);
-    memcpy(tweakey + 16, key,   16);
-    /* NULL left output → reference impl computes right branch only
-     * with reduced round count                                      */
-    forkskinny_128_256_encrypt(tweakey, NULL, out_right, input);
-}
-
 /* Standard decrypt — recover plaintext from c0 (left ciphertext)
  * Used by: SAFE, ZAFE
  */
@@ -66,4 +35,81 @@ void fork_decrypt(const uint8_t key[16],
     memcpy(tweakey,      tweak, 16);
     memcpy(tweakey + 16, key,   16);
     forkskinny_128_256_decrypt(tweakey, pt, c1, ct);
+}
+
+/* Full forkcipher call: selector b */
+void fork_encrypt_full(const uint8_t key[16],
+                       const uint8_t tweak[16],
+                       const uint8_t input[16],
+                       uint8_t out_left[16],
+                       uint8_t out_right[16])
+{
+    uint8_t tweakey[32];
+    memcpy(tweakey,      tweak, 16);
+    memcpy(tweakey + 16, key,   16);
+
+    forkskinny_128_256_encrypt(tweakey, out_left, out_right, input);
+}
+
+/*
+ * One-legged call for selector 0 = left output only.
+ *
+ * This version is always functionally correct:
+ * it computes both outputs and discards the right one.
+ *
+ * If your backend is documented to support a faster "left-only" path
+ * when out_right == NULL, you can replace this with:
+ *
+ *   forkskinny_128_256_encrypt(tweakey, out_left, NULL, input);
+ *
+ * But do not assume that unless you have verified it in the backend.
+ */
+void fork_encrypt_left(const uint8_t key[16],
+                       const uint8_t tweak[16],
+                       const uint8_t input[16],
+                       uint8_t out_left[16])
+{
+    uint8_t tweakey[32];
+    uint8_t dummy_right[16];
+
+    memcpy(tweakey,      tweak, 16);
+    memcpy(tweakey + 16, key,   16);
+
+    forkskinny_128_256_encrypt(tweakey, out_left, dummy_right, input);
+}
+
+/*
+ * Optional compatibility helper.
+ * Not used by paper-faithful SuperSonic.
+ *
+ * Same note as above: this is the safe functional version.
+ * If the backend explicitly supports (NULL, out_right) as a reduced-round
+ * right-only call and you have verified that behavior, you may switch to it.
+ */
+void fork_encrypt_right(const uint8_t key[16],
+                        const uint8_t tweak[16],
+                        const uint8_t input[16],
+                        uint8_t out_right[16])
+{
+    uint8_t tweakey[32];
+    uint8_t dummy_left[16];
+
+    memcpy(tweakey,      tweak, 16);
+    memcpy(tweakey + 16, key,   16);
+
+    forkskinny_128_256_encrypt(tweakey, dummy_left, out_right, input);
+}
+
+/* Decrypt from the left ciphertext branch */
+void fork_decrypt_left(const uint8_t key[16],
+                       const uint8_t tweak[16],
+                       const uint8_t ct_left[16],
+                       uint8_t pt[16],
+                       uint8_t out_right[16])
+{
+    uint8_t tweakey[32];
+    memcpy(tweakey,      tweak, 16);
+    memcpy(tweakey + 16, key,   16);
+
+    forkskinny_128_256_decrypt(tweakey, pt, out_right, ct_left);
 }
