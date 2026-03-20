@@ -6,6 +6,8 @@
 #include "forkskinny_tbc.h"
 #include "forkskinny_zafe.h"
 
+/* no nonce in these APIs anymore */
+
 /* ------------------------------------------------------------------------- */
 /* parameters                                                                */
 /* ------------------------------------------------------------------------- */
@@ -13,13 +15,14 @@
 #define ZAFE_INTERNAL_N          16
 #define ZAFE_INTERNAL_2N         32
 #define ZAFE_INTERNAL_TAG_LEN    32
-#define ZAFE_INTERNAL_KEY_LEN    16
+#define ZAFE_INTERNAL_ENC_KEY    16
+#define ZAFE_INTERNAL_MAC_KEY    16
 
-/* ZMAC parameters */
-#define ZMAC_BS         16
-#define ZMAC_TS         16
-#define ZMAC_KS         16
-#define ZMAC_PBSIZE     (ZMAC_BS + ZMAC_TS - 1)   /* 31 bytes */
+/* ZMAC parameters for the ForkSkinny-adapted backend */
+#define ZMAC_BS                  16
+#define ZMAC_TS                  16
+#define ZMAC_KS                  16
+#define ZMAC_PBSIZE              (ZMAC_BS + ZMAC_TS - 1)   /* 31 bytes */
 
 /* ------------------------------------------------------------------------- */
 /* helpers                                                                   */
@@ -27,28 +30,32 @@
 
 static void xor_into(uint8_t *dst, const uint8_t *src, size_t len)
 {
-    for (size_t i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++) {
         dst[i] ^= src[i];
+    }
 }
 
 static void xor_prefix(uint8_t *dst, const uint8_t *src, size_t len)
 {
-    for (size_t i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++) {
         dst[i] ^= src[i];
+    }
 }
 
 static void ct_memzero(void *p, size_t n)
 {
     volatile uint8_t *v = (volatile uint8_t *)p;
-    while (n--)
+    while (n--) {
         *v++ = 0;
+    }
 }
 
 static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
 {
     uint8_t diff = 0;
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         diff |= (uint8_t)(a[i] ^ b[i]);
+    }
     return diff == 0;
 }
 
@@ -93,7 +100,7 @@ static void be128_rshift1(uint8_t x[16])
 {
     uint8_t carry = 0;
     for (int i = 0; i < 16; i++) {
-        uint8_t next_carry = (uint8_t)(x[i] & 1);
+        uint8_t next_carry = (uint8_t)(x[i] & 1u);
         x[i] = (uint8_t)((x[i] >> 1) | (carry << 7));
         carry = next_carry;
     }
@@ -108,21 +115,22 @@ static void split_u_v_255(const uint8_t s[32], uint8_t U[16], uint8_t V[16])
 
 static size_t pad10_len(size_t len, size_t blocksize)
 {
-    return ((len / blocksize) + 1) * blocksize;
+    return ((len / blocksize) + 1u) * blocksize;
 }
 
 static size_t write_pad10(uint8_t *out, const uint8_t *in, size_t len, size_t blocksize)
 {
     size_t plen = pad10_len(len, blocksize);
     memset(out, 0, plen);
-    if (len)
+    if (len) {
         memcpy(out, in, len);
+    }
     out[len] = 0x80;
     return plen;
 }
 
 /* ------------------------------------------------------------------------- */
-/* ForkSkinny TPRF for FEnc                                                  */
+/* ForkSkinny-adapted TPRF for FEnc                                          */
 /* ------------------------------------------------------------------------- */
 
 /* tweak = b || V, where b is stored in tweak[0] bit 7 */
@@ -131,11 +139,11 @@ static void make_tweak_from_V(uint8_t tweak[16], uint8_t domain_bit,
 {
     memcpy(tweak, V, 16);
     tweak[0] &= 0x7F;
-    tweak[0] |= (uint8_t)((domain_bit & 1) << 7);
+    tweak[0] |= (uint8_t)((domain_bit & 1u) << 7);
 }
 
 /* F_K^{b||V}(U) -> 32 bytes = left || right */
-static void tprf_eval_32(const uint8_t key[ZAFE_INTERNAL_KEY_LEN],
+static void tprf_eval_32(const uint8_t key[ZAFE_INTERNAL_ENC_KEY],
                          uint8_t domain_bit,
                          const uint8_t V[16],
                          const uint8_t U[16],
@@ -151,10 +159,13 @@ static void tprf_eval_32(const uint8_t key[ZAFE_INTERNAL_KEY_LEN],
 /* FEnc                                                                      */
 /* ------------------------------------------------------------------------- */
 
-/* Algorithm 4 uses IV = [T]_{min(lambda, n+t)}.
+/*
+ * Algorithm 4:
+ *   IV <- [T]_{min(lambda, n+t)}
+ *
  * Here lambda = 256 and n+t = 256, so IV is the full 32-byte tag.
  */
-static void fenc_crypt(const uint8_t key[ZAFE_INTERNAL_KEY_LEN],
+static void fenc_crypt(const uint8_t key[ZAFE_INTERNAL_ENC_KEY],
                        const uint8_t iv[ZAFE_INTERNAL_TAG_LEN],
                        const uint8_t *in, size_t len,
                        uint8_t *out)
@@ -177,8 +188,9 @@ static void fenc_crypt(const uint8_t key[ZAFE_INTERNAL_KEY_LEN],
         /* keystream = F_K^{1||V}(U + ctr) */
         tprf_eval_32(key, 1, V, ctrU, ks);
 
-        for (size_t i = 0; i < take; i++)
-            out[off + i] = in[off + i] ^ ks[i];
+        for (size_t i = 0; i < take; i++) {
+            out[off + i] = (uint8_t)(in[off + i] ^ ks[i]);
+        }
 
         off += take;
         ++ctr;
@@ -195,9 +207,10 @@ static void fenc_crypt(const uint8_t key[ZAFE_INTERNAL_KEY_LEN],
 /* ZMAC single-block primitive                                               */
 /* ------------------------------------------------------------------------- */
 
-/* Pure ForkSkinny version:
+/*
+ * ForkSkinny adaptation:
  * use one fixed branch as the single-output block primitive E for ZMAC.
- * Here we choose the LEFT branch consistently.
+ * We choose the LEFT branch consistently.
  */
 static void zmac_block_encrypt(const uint8_t key[16],
                                const uint8_t tweak[16],
@@ -229,14 +242,15 @@ typedef struct {
 
 static void arrLeftByOne(uint8_t *out, int len)
 {
-    for (int i = 0; i < len - 1; ++i)
-        out[i] = (uint8_t)((out[i] << 1) | ((out[i + 1] >> 7) & 1));
+    for (int i = 0; i < len - 1; ++i) {
+        out[i] = (uint8_t)((out[i] << 1) | ((out[i + 1] >> 7) & 1u));
+    }
     out[len - 1] <<= 1;
 }
 
 static void arrMULT(uint8_t *out, uint8_t prpol, uint8_t len)
 {
-    uint8_t tmp = (uint8_t)((out[len - 1] >> 7) & 1);
+    uint8_t tmp = (uint8_t)((out[len - 1] >> 7) & 1u);
     arrLeftByOne(out, len);
     out[0] ^= (uint8_t)(prpol * tmp);
 }
@@ -384,7 +398,7 @@ static void zfmac(const uint8_t mac_key[16],
     mp  = pad10_len(mlen,  ZMAC_PBSIZE);
     xlen = adp + mp + sizeof(lenblk);
 
-    X = (uint8_t *)malloc(xlen);
+    X = (uint8_t *)malloc(xlen ? xlen : 1u);
     if (!X) {
         memset(tag, 0, 32);
         return;
@@ -393,6 +407,7 @@ static void zfmac(const uint8_t mac_key[16],
     off = 0;
     off += write_pad10(X + off, ad, adlen, ZMAC_PBSIZE);
     off += write_pad10(X + off, msg, mlen, ZMAC_PBSIZE);
+
     encode_len128(lenblk, adlen);
     encode_len128(lenblk + 16, mlen);
     memcpy(X + off, lenblk, sizeof(lenblk));
@@ -405,50 +420,34 @@ static void zfmac(const uint8_t mac_key[16],
 }
 
 /* ------------------------------------------------------------------------- */
-/* public API                                                                */
+/* public API: paper-structured 2-key ZAFE                                   */
 /* ------------------------------------------------------------------------- */
-
-static void derive_iv_from_tag(const uint8_t tag[ZAFE_TAG_LEN],
-                               uint8_t iv[ZAFE_INTERNAL_TAG_LEN])
-{
-    memcpy(iv, tag, ZAFE_TAG_LEN);
-    memcpy(iv + ZAFE_TAG_LEN, tag, ZAFE_TAG_LEN);
-}
 
 void forkskinny_zafe_keygen(const uint8_t key[ZAFE_KEY_LEN],
                             zafe_key_t *ks)
 {
-    memcpy(ks->key, key, ZAFE_KEY_LEN);
+    memcpy(ks->enc_key, key, 16);
+    memcpy(ks->mac_key, key + 16, 16);
 }
 
 void forkskinny_zafe_hash(const zafe_key_t *ks,
-                          const uint8_t nonce[ZAFE_NONCE_LEN],
                           const uint8_t *ad, size_t adlen,
                           const uint8_t *msg, size_t mlen,
                           uint8_t tag[ZAFE_TAG_LEN])
 {
     uint8_t full_tag[ZAFE_INTERNAL_TAG_LEN];
-
-    zfmac(ks->key, nonce, ZAFE_NONCE_LEN, msg, mlen, full_tag);
-    if (ad && adlen) {
-        uint8_t ad_tag[ZAFE_INTERNAL_TAG_LEN];
-        zfmac(ks->key, ad, adlen, msg, mlen, ad_tag);
-        xor_into(full_tag, ad_tag, ZAFE_INTERNAL_TAG_LEN);
-        ct_memzero(ad_tag, sizeof(ad_tag));
-    }
-
+    zfmac(ks->mac_key, ad, adlen, msg, mlen, full_tag);
     memcpy(tag, full_tag, ZAFE_TAG_LEN);
     ct_memzero(full_tag, sizeof(full_tag));
 }
 
 int forkskinny_zafe_verify(const zafe_key_t *ks,
-                           const uint8_t nonce[ZAFE_NONCE_LEN],
                            const uint8_t *ad, size_t adlen,
                            const uint8_t *msg, size_t mlen,
                            const uint8_t tag[ZAFE_TAG_LEN])
 {
     uint8_t computed[ZAFE_TAG_LEN];
-    forkskinny_zafe_hash(ks, nonce, ad, adlen, msg, mlen, computed);
+    forkskinny_zafe_hash(ks, ad, adlen, msg, mlen, computed);
 
     {
         int ok = ct_memcmp_eq(computed, tag, ZAFE_TAG_LEN) ? 0 : -1;
@@ -462,10 +461,8 @@ void forkskinny_zafe_encrypt(const zafe_key_t *ks,
                              const uint8_t *msg, size_t mlen,
                              uint8_t *ct)
 {
-    uint8_t iv[ZAFE_INTERNAL_TAG_LEN];
-    derive_iv_from_tag(tag, iv);
-    fenc_crypt(ks->key, iv, msg, mlen, ct);
-    ct_memzero(iv, sizeof(iv));
+    /* IV = [T]_{min(lambda, n+t)} = full 32-byte tag here */
+    fenc_crypt(ks->enc_key, tag, msg, mlen, ct);
 }
 
 void forkskinny_zafe_decrypt(const zafe_key_t *ks,
@@ -473,34 +470,31 @@ void forkskinny_zafe_decrypt(const zafe_key_t *ks,
                              const uint8_t *ct, size_t clen,
                              uint8_t *msg)
 {
-    uint8_t iv[ZAFE_INTERNAL_TAG_LEN];
-    derive_iv_from_tag(tag, iv);
-    fenc_crypt(ks->key, iv, ct, clen, msg);
-    ct_memzero(iv, sizeof(iv));
+    fenc_crypt(ks->enc_key, tag, ct, clen, msg);
 }
 
 void forkskinny_zafe_encrypt_auth(const zafe_key_t *ks,
-                                  const uint8_t nonce[ZAFE_NONCE_LEN],
                                   const uint8_t *ad, size_t adlen,
                                   const uint8_t *msg, size_t mlen,
                                   uint8_t *ct,
                                   uint8_t tag[ZAFE_TAG_LEN])
 {
-    forkskinny_zafe_hash(ks, nonce, ad, adlen, msg, mlen, tag);
+    forkskinny_zafe_hash(ks, ad, adlen, msg, mlen, tag);
     forkskinny_zafe_encrypt(ks, tag, msg, mlen, ct);
 }
 
 int forkskinny_zafe_decrypt_verify(const zafe_key_t *ks,
-                                   const uint8_t nonce[ZAFE_NONCE_LEN],
                                    const uint8_t *ad, size_t adlen,
                                    const uint8_t *ct, size_t clen,
                                    const uint8_t tag[ZAFE_TAG_LEN],
                                    uint8_t *msg)
 {
     forkskinny_zafe_decrypt(ks, tag, ct, clen, msg);
-    if (forkskinny_zafe_verify(ks, nonce, ad, adlen, msg, clen, tag) != 0) {
+
+    if (forkskinny_zafe_verify(ks, ad, adlen, msg, clen, tag) != 0) {
         ct_memzero(msg, clen);
         return -1;
     }
+
     return 0;
 }

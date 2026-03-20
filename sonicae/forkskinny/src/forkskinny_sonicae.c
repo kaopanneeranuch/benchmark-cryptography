@@ -186,13 +186,10 @@ static uint8_t *build_injective_sonicae_input(const uint8_t *ad, size_t adlen,
 }
 
 /* --------------------------------------------------------------------------
- * KDF placeholder: paper leaves Derive(K) abstract
  *
- * Default engineering choice:
  *   K1 <- left output of F_K(0^t, 0^n)
  *   K2 <- left output of F_K(0^t, 0...01), truncated to t-2 bits
  *
- * Replace if you later obtain a project-specific or author-specific KDF.
  * -------------------------------------------------------------------------- */
 
 static void sonicae_derive_subkeys(const uint8_t master[SS_K_BYTES],

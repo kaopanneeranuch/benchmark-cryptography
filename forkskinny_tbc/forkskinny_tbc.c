@@ -53,16 +53,6 @@ void fork_encrypt_full(const uint8_t key[16],
 
 /*
  * One-legged call for selector 0 = left output only.
- *
- * This version is always functionally correct:
- * it computes both outputs and discards the right one.
- *
- * If your backend is documented to support a faster "left-only" path
- * when out_right == NULL, you can replace this with:
- *
- *   forkskinny_128_256_encrypt(tweakey, out_left, NULL, input);
- *
- * But do not assume that unless you have verified it in the backend.
  */
 void fork_encrypt_left(const uint8_t key[16],
                        const uint8_t tweak[16],
@@ -78,14 +68,6 @@ void fork_encrypt_left(const uint8_t key[16],
     forkskinny_128_256_encrypt(tweakey, out_left, dummy_right, input);
 }
 
-/*
- * Optional compatibility helper.
- * Not used by paper-faithful SuperSonic.
- *
- * Same note as above: this is the safe functional version.
- * If the backend explicitly supports (NULL, out_right) as a reduced-round
- * right-only call and you have verified that behavior, you may switch to it.
- */
 void fork_encrypt_right(const uint8_t key[16],
                         const uint8_t tweak[16],
                         const uint8_t input[16],
