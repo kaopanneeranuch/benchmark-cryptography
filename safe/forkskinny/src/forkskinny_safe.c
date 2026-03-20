@@ -1,210 +1,72 @@
 #include "forkskinny_safe.h"
-#include "forkskinny_tbc.h"
+#include "internal-forkskinny.h"
+#include "gctr-3.h"
 
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include <stdlib.h>
 
-#define SAFE_N       16
-#define SAFE_2N      32
-#define SAFE_TAG_LEN 32
-
-
-// Add counters
-
-static uint64_t g_safe_gf256_mul_count = 0;
-static uint64_t g_safe_tprf_eval_count = 0;
-static uint64_t g_safe_absorbed_block_count = 0;
-
-void forkskinny_safe_reset_counters(void)
-{
-    g_safe_gf256_mul_count = 0;
-    g_safe_tprf_eval_count = 0;
-    g_safe_absorbed_block_count = 0;
-}
-
-uint64_t forkskinny_safe_get_gf256_mul_count(void)
-{
-    return g_safe_gf256_mul_count;
-}
-
-uint64_t forkskinny_safe_get_tprf_eval_count(void)
-{
-    return g_safe_tprf_eval_count;
-}
-
-uint64_t forkskinny_safe_get_absorbed_block_count(void)
-{
-    return g_safe_absorbed_block_count;
-}
-
-/* We instantiate SAFE with a 128-bit tweak and reserve 1 bit for domain
- * separation, leaving 127 bits for V.
- *
- * Bit convention used consistently in this file:
- *   tweak[0] bit 7  = domain bit b
- *   tweak[0] bits 6..0, tweak[1..15] = V (127 bits)
- */
-
-/* ------------------------------------------------------------------------- */
-/* helpers                                                                   */
-/* ------------------------------------------------------------------------- */
-
-static void xor_into(uint8_t *dst, const uint8_t *src, size_t len)
-{
-    for (size_t i = 0; i < len; i++)
-        dst[i] ^= src[i];
-}
-
-static void xor_block(uint8_t *dst, const uint8_t *a, const uint8_t *b, size_t len)
-{
-    for (size_t i = 0; i < len; i++)
-        dst[i] = a[i] ^ b[i];
-}
+#define N       16
+#define TWO_N   32
+#define KEY_LEN 16
+#define SAFE_IV_LEN 32
 
 static void ct_memzero(void *p, size_t n)
 {
-    volatile uint8_t *v = (volatile uint8_t *)p;
-    while (n--)
-        *v++ = 0;
+    volatile uint8_t *vp = (volatile uint8_t *)p;
+    while (n--) {
+        *vp++ = 0;
+    }
 }
 
 static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
 {
     uint8_t diff = 0;
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; ++i) {
         diff |= (uint8_t)(a[i] ^ b[i]);
+    }
     return diff == 0;
 }
 
-/* Big-endian 128-bit addition by a 32-bit counter */
-static void be128_add_u32(uint8_t x[16], uint32_t add)
+// gf multiplication
+static void xor32(uint8_t dst[32], const uint8_t src[32])
 {
-    int i = 15;
-    uint32_t carry = add;
-
-    while (i >= 0 && carry) {
-        carry += x[i];
-        x[i] = (uint8_t)carry;
-        carry >>= 8;
-        --i;
+    for (int i = 0; i < 32; i++) {
+        dst[i] ^= src[i];
     }
 }
 
-/* 128-bit big-endian encoding of bit length */
-static void encode_len128(uint8_t out[16], size_t bytes)
+static void shl1_32(uint8_t x[32])
 {
-    uint64_t hi = 0;
-    uint64_t lo = (uint64_t)bytes * 8ULL;
-
-    out[0]  = (uint8_t)(hi >> 56);
-    out[1]  = (uint8_t)(hi >> 48);
-    out[2]  = (uint8_t)(hi >> 40);
-    out[3]  = (uint8_t)(hi >> 32);
-    out[4]  = (uint8_t)(hi >> 24);
-    out[5]  = (uint8_t)(hi >> 16);
-    out[6]  = (uint8_t)(hi >>  8);
-    out[7]  = (uint8_t)(hi);
-
-    out[8]  = (uint8_t)(lo >> 56);
-    out[9]  = (uint8_t)(lo >> 48);
-    out[10] = (uint8_t)(lo >> 40);
-    out[11] = (uint8_t)(lo >> 32);
-    out[12] = (uint8_t)(lo >> 24);
-    out[13] = (uint8_t)(lo >> 16);
-    out[14] = (uint8_t)(lo >>  8);
-    out[15] = (uint8_t)(lo);
-}
-
-static void be128_rshift1(uint8_t x[16])
-{
-    uint8_t carry = 0;
-    for (int i = 0; i < 16; i++) {
-        uint8_t next_carry = (uint8_t)(x[i] & 1);
-        x[i] = (uint8_t)((x[i] >> 1) | (carry << 7));
-        carry = next_carry;
+    for (int i = 0; i < 31; i++) {
+        x[i] = (uint8_t)((x[i] << 1) | (x[i + 1] >> 7));
     }
+    x[31] <<= 1;
 }
 
-static void split_u_v_255(const uint8_t s[32], uint8_t U[16], uint8_t V[16])
-{
-    memcpy(U, s, 16);
-    memcpy(V, s + 16, 16);
-    be128_rshift1(V);
-}
-
-/* ------------------------------------------------------------------------- */
-/* tweak packing                                                             */
-/* ------------------------------------------------------------------------- */
-
-static void make_tweak_from_V(uint8_t tweak[16], uint8_t domain_bit,
-                              const uint8_t V[16])
-{
-    memcpy(tweak, V, 16);
-    tweak[0] &= 0x7F;                               /* clear domain bit slot   */
-    tweak[0] |= (uint8_t)((domain_bit & 1) << 7);  /* set b || V convention   */
-}
-
-/* F_K^{b||V}(U) -> 2n bits = left || right */
-static void tprf_eval_32(const uint8_t key[SAFE_KEY_LEN],
-                         uint8_t domain_bit,
-                         const uint8_t V[16],
-                         const uint8_t U[16],
-                         uint8_t out[32])
-{
-    uint8_t tweak[16];
-
-    //counter
-    g_safe_tprf_eval_count++;
-
-    make_tweak_from_V(tweak, domain_bit, V);
-    fork_encrypt_full(key, tweak, U, out, out + 16);
-}
-
-/* ------------------------------------------------------------------------- */
-/* GF(2^256), reduction polynomial x^256 + x^10 + x^5 + x^2 + 1             */
-/* ------------------------------------------------------------------------- */
-
-static void gf256_shift_left_1(uint8_t x[32])
-{
-    uint8_t carry = 0;
-    for (int i = 31; i >= 0; --i) {
-        uint8_t next = (uint8_t)(x[i] >> 7);
-        x[i] = (uint8_t)((x[i] << 1) | carry);
-        carry = next;
-    }
-}
-
-/* If the x^256 term appears, reduce with x^10 + x^5 + x^2 + 1.
- * Byte layout here is big-endian, with the least-significant polynomial
- * bits living in x[31].
- */
-static void gf256_reduce_bit(uint8_t x[32])
-{
-    x[31] ^= 0x25; /* bits 5,2,0 */
-    x[30] ^= 0x04; /* bit 10      */
-}
-
-static void gf256_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
+static void gf_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
 {
     uint8_t z[32] = {0};
     uint8_t v[32];
 
-    //counter
-    g_safe_gf256_mul_count++;
-
     memcpy(v, a, 32);
 
-    for (size_t i = 0; i < 32; i++) {
-        for (int bit = 7; bit >= 0; --bit) {
-            if ((b[i] >> bit) & 1)
-                xor_into(z, v, 32);
+    for (int byte = 0; byte < 32; byte++) {
+        for (int bit = 7; bit >= 0; bit--) {
+            if ((b[byte] >> bit) & 1U) {
+                xor32(z, v);
+            }
 
             {
-                uint8_t msb = (uint8_t)(v[0] >> 7);
-                gf256_shift_left_1(v);
-                if (msb)
-                    gf256_reduce_bit(v);
+                uint8_t msb = v[0] & 0x80U;
+                shl1_32(v);
+
+                if (msb) {
+                    /* XOR low terms: x^10 + x^5 + x^2 + 1 */
+                    v[30] ^= 0x04; /* x^10 */
+                    v[31] ^= 0x25; /* x^5 + x^2 + 1 */
+                }
             }
         }
     }
@@ -212,120 +74,126 @@ static void gf256_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
     memcpy(out, z, 32);
 }
 
-/* ------------------------------------------------------------------------- */
-/* SFMac block absorption                                                    */
-/* ------------------------------------------------------------------------- */
-
-static void sfmac_absorb_block(uint8_t T[32], const uint8_t L[32],
-                               const uint8_t block[32])
+// pad10
+static size_t pad10(uint8_t *out, const uint8_t *in, size_t len)
 {
-    uint8_t tmp[32];
+    size_t padded_len = len + 1 + ((TWO_N - ((len + 1) % TWO_N)) % TWO_N);
 
-    //counter
-    g_safe_absorbed_block_count++;
-    
-    xor_block(tmp, T, block, 32);
-    gf256_mul(T, tmp, L);
-}
-
-static void sfmac_absorb_pad10(uint8_t T[32], const uint8_t L[32],
-                               const uint8_t *data, size_t len)
-{
-    uint8_t block[32];
-    size_t off = 0;
-
-    while (len - off >= 32) {
-        sfmac_absorb_block(T, L, data + off);
-        off += 32;
+    if (len > 0) {
+        memcpy(out, in, len);
     }
 
-    /* Pad10 always adds one full block when input is already aligned */
-    memset(block, 0, sizeof(block));
-    if (len > off)
-        memcpy(block, data + off, len - off);
-    block[len - off] = 0x80;
-
-    sfmac_absorb_block(T, L, block);
-}
-
-static void sfmac(const uint8_t key[SAFE_KEY_LEN],
-                  const uint8_t *ad, size_t adlen,
-                  const uint8_t *msg, size_t mlen,
-                  uint8_t tag[SAFE_TAG_LEN])
-{
-    uint8_t zeroU[16] = {0};
-    uint8_t zeroV[16] = {0};
-    uint8_t L[32];
-    uint8_t T[32] = {0};
-    uint8_t block[32];
-    uint8_t U[16];
-    uint8_t V[16];
-    uint8_t Y[32];
-
-    /* L = [F_K^{0 || 0^t}(0^n)]_(2n) */
-    tprf_eval_32(key, 0, zeroV, zeroU, L);
-
-    /* X = Pad10(A) || Pad10(M) || <|A|>_n || <|M|>_n */
-    sfmac_absorb_pad10(T, L, ad, adlen);
-    sfmac_absorb_pad10(T, L, msg, mlen);
-
-    encode_len128(block, adlen);
-    encode_len128(block + 16, mlen);
-    sfmac_absorb_block(T, L, block);
-
-    split_u_v_255(T, U, V);
-
-    /* Tag = [F_K^{0 || V}(U)]_lambda, lambda = 256 here */
-    tprf_eval_32(key, 0, V, U, Y);
-    memcpy(tag, Y, SAFE_TAG_LEN);
-
-    ct_memzero(L, sizeof(L));
-    ct_memzero(T, sizeof(T));
-    ct_memzero(block, sizeof(block));
-    ct_memzero(U, sizeof(U));
-    ct_memzero(V, sizeof(V));
-    ct_memzero(Y, sizeof(Y));
-}
-
-/* ------------------------------------------------------------------------- */
-/* FEnc                                                                      */
-/* ------------------------------------------------------------------------- */
-
-static void fenc_crypt(const uint8_t key[SAFE_KEY_LEN],
-                       const uint8_t iv[SAFE_TAG_LEN],
-                       const uint8_t *in, size_t len,
-                       uint8_t *out)
-{
-    uint8_t U[16];
-    uint8_t V[16];
-    size_t off = 0;
-    uint32_t ctr = 0;
-
-    split_u_v_255(iv, U, V);
-
-    while (off < len) {
-        uint8_t ctrU[16];
-        uint8_t ks[32];
-        size_t take = (len - off < 32) ? (len - off) : 32;
-
-        memcpy(ctrU, U, 16);
-        be128_add_u32(ctrU, ctr);
-
-        /* keystream = F_K^{1 || V}(U + ctr) */
-        tprf_eval_32(key, 1, V, ctrU, ks);
-
-        for (size_t i = 0; i < take; i++)
-            out[off + i] = in[off + i] ^ ks[i];
-
-        off += take;
-        ++ctr;
-
-        ct_memzero(ctrU, sizeof(ctrU));
-        ct_memzero(ks, sizeof(ks));
+    out[len] = 0x80;
+    if (padded_len > len + 1) {
+        memset(out + len + 1, 0, padded_len - len - 1);
     }
 
-    ct_memzero(U, sizeof(U));
-    ct_memzero(V, sizeof(V));
+    return padded_len;
+}
+
+// SFMac
+static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
+{
+    uint64_t hi = ((uint64_t)len_bytes) >> 61;
+    uint64_t lo = ((uint64_t)len_bytes) << 3;
+
+    memset(out, 0, N);
+
+    for (int i = 7; i >= 0; --i) {
+        out[i] = (uint8_t)(hi & 0xFFU);
+        hi >>= 8;
+    }
+
+    for (int i = 15; i >= 8; --i) {
+        out[i] = (uint8_t)(lo & 0xFFU);
+        lo >>= 8;
+    }
+}
+
+int sfmac(const uint8_t key[KEY_LEN],
+          const uint8_t *ad, size_t ad_len,
+          const uint8_t *msg, size_t msg_len,
+          uint8_t *tag, size_t tag_len)
+{
+    uint8_t T[TWO_N];
+    uint8_t L[TWO_N];
+    uint8_t tk[TWO_N];
+    uint8_t zero[N] = {0};
+    uint8_t tmp[TWO_N];
+    uint8_t U[N];
+
+    uint8_t *X;
+    size_t a_pad_len, m_pad_len, x_len;
+    size_t off = 0;
+
+    if (!key || !tag) {
+        return -1;
+    }
+    if ((ad_len && !ad) || (msg_len && !msg)) {
+        return -1;
+    }
+    if (tag_len > TWO_N) {
+        return -1;
+    }
+
+    /* lengths after Pad10 */
+    a_pad_len = ad_len + 1 + ((TWO_N - ((ad_len + 1) % TWO_N)) % TWO_N);
+    m_pad_len = msg_len + 1 + ((TWO_N - ((msg_len + 1) % TWO_N)) % TWO_N);
+
+    /* X = Pad10(A) || Pad10(M) || |A|_n || |M|_n */
+    x_len = a_pad_len + m_pad_len + TWO_N;
+    X = (uint8_t *)malloc(x_len);
+    if (!X) {
+        return -1;
+    }
+
+    off += pad10(X + off, ad, ad_len);
+    off += pad10(X + off, msg, msg_len);
+
+    encode_bitlen_be128(X + off, ad_len);
+    off += N;
+
+    encode_bitlen_be128(X + off, msg_len);
+    off += N;
+
+    /* T <- 0^(2n) */
+    memset(T, 0, TWO_N);
+
+    /* L <- [ F_K^(0^(t+1))(0^n) ]_(2n) */
+    memset(tk, 0, TWO_N);         /* tweak = 0...0 */
+    memcpy(tk + N, key, KEY_LEN); /* tk = tweak || key */
+    forkskinny_128_256_encrypt(tk, L, L + N, zero);
+
+    /* for each 32-byte block: T <- (T XOR X[i]) gf_mul L */
+    for (size_t i = 0; i < x_len; i += TWO_N) {
+        for (size_t j = 0; j < TWO_N; ++j) {
+            tmp[j] = (uint8_t)(T[j] ^ X[i + j]);
+        }
+        gf_mul(T, tmp, L);
+    }
+
+    /* U || V <- [T]_(n+t) */
+    memcpy(U, T, N);
+    memcpy(tk, T + N, N);
+
+    /* force tweak to (0 || V) */
+    tk[0] &= 0x7FU;
+    memcpy(tk + N, key, KEY_LEN);
+
+    /* T <- F_K^(0 || V)(U) */
+    forkskinny_128_256_encrypt(tk, T, T + N, U);
+
+    /* return first tag_len bytes */
+    memcpy(tag, T, tag_len);
+
+    free(X);
+    return 0;
+}
+
+static void safe_iv_from_tag(const uint8_t tag[SAFE_TAG_LEN],
+                             uint8_t iv[SAFE_IV_LEN])
+{
+    memcpy(iv, tag, SAFE_IV_LEN);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -337,12 +205,12 @@ void forkskinny_safe_keygen(const uint8_t key[SAFE_KEY_LEN], safe_key_t *ks)
     memcpy(ks->key, key, SAFE_KEY_LEN);
 }
 
-void forkskinny_safe_auth(const safe_key_t *ks,
-                          const uint8_t *ad, size_t adlen,
-                          const uint8_t *msg, size_t mlen,
-                          uint8_t tag[SAFE_TAG_LEN])
+int forkskinny_safe_auth(const safe_key_t *ks,
+                         const uint8_t *ad, size_t adlen,
+                         const uint8_t *msg, size_t mlen,
+                         uint8_t tag[SAFE_TAG_LEN])
 {
-    sfmac(ks->key, ad, adlen, msg, mlen, tag);
+    return sfmac(ks->key, ad, adlen, msg, mlen, tag, SAFE_TAG_LEN);
 }
 
 int forkskinny_safe_verify(const safe_key_t *ks,
@@ -351,58 +219,92 @@ int forkskinny_safe_verify(const safe_key_t *ks,
                            const uint8_t tag[SAFE_TAG_LEN])
 {
     uint8_t computed[SAFE_TAG_LEN];
-    sfmac(ks->key, ad, adlen, msg, mlen, computed);
+    int rc;
 
-    {
-        int ok = ct_memcmp_eq(computed, tag, SAFE_TAG_LEN) ? 0 : -1;
+    rc = sfmac(ks->key, ad, adlen, msg, mlen, computed, SAFE_TAG_LEN);
+    if (rc != 0) {
         ct_memzero(computed, sizeof(computed));
-        return ok;
+        return -1;
     }
+
+    rc = ct_memcmp_eq(computed, tag, SAFE_TAG_LEN) ? 0 : -1;
+    ct_memzero(computed, sizeof(computed));
+    return rc;
 }
 
 void forkskinny_safe_encrypt(const safe_key_t *ks,
-                             const uint8_t *ad, size_t adlen,
-                             const uint8_t *msg, size_t mlen,
-                             uint8_t *ct,
-                             uint8_t tag[SAFE_TAG_LEN])
+                             const uint8_t tag[SAFE_TAG_LEN],
+                             const uint8_t *pt, size_t ptlen,
+                             uint8_t *ct)
 {
-    sfmac(ks->key, ad, adlen, msg, mlen, tag);
-    fenc_crypt(ks->key, tag, msg, mlen, ct);
+    uint8_t iv[SAFE_IV_LEN];
+
+    safe_iv_from_tag(tag, iv);
+    gctr_crypt(ks->key, iv, pt, ptlen, ct);
+    ct_memzero(iv, sizeof(iv));
 }
 
-int forkskinny_safe_decrypt(const safe_key_t *ks,
-                            const uint8_t *ad, size_t adlen,
-                            const uint8_t *ct, size_t clen,
-                            const uint8_t tag[SAFE_TAG_LEN],
-                            uint8_t *msg)
+void forkskinny_safe_decrypt(const safe_key_t *ks,
+                             const uint8_t tag[SAFE_TAG_LEN],
+                             const uint8_t *ct, size_t ctlen,
+                             uint8_t *pt)
 {
+    uint8_t iv[SAFE_IV_LEN];
+
+    safe_iv_from_tag(tag, iv);
+    gctr_crypt(ks->key, iv, ct, ctlen, pt);
+    ct_memzero(iv, sizeof(iv));
+}
+
+int forkskinny_safe_encrypt_auth(const safe_key_t *ks,
+                                 const uint8_t *ad, size_t adlen,
+                                 const uint8_t *msg, size_t mlen,
+                                 uint8_t *ct,
+                                 uint8_t tag[SAFE_TAG_LEN])
+{
+    uint8_t iv[SAFE_IV_LEN];
+    int rc;
+
+    rc = sfmac(ks->key, ad, adlen, msg, mlen, tag, SAFE_TAG_LEN);
+    if (rc != 0) {
+        return -1;
+    }
+
+    safe_iv_from_tag(tag, iv);
+    gctr_crypt(ks->key, iv, msg, mlen, ct);
+    ct_memzero(iv, sizeof(iv));
+
+    return 0;
+}
+
+int forkskinny_safe_decrypt_verify(const safe_key_t *ks,
+                                   const uint8_t *ad, size_t adlen,
+                                   const uint8_t *ct, size_t clen,
+                                   const uint8_t tag[SAFE_TAG_LEN],
+                                   uint8_t *msg)
+{
+    uint8_t iv[SAFE_IV_LEN];
     uint8_t computed[SAFE_TAG_LEN];
+    int rc;
 
-    fenc_crypt(ks->key, tag, ct, clen, msg);
-    sfmac(ks->key, ad, adlen, msg, clen, computed);
+    safe_iv_from_tag(tag, iv);
+    gctr_crypt(ks->key, iv, ct, clen, msg);
+    ct_memzero(iv, sizeof(iv));
 
-    if (!ct_memcmp_eq(computed, tag, SAFE_TAG_LEN)) {
+    rc = sfmac(ks->key, ad, adlen, msg, clen, computed, SAFE_TAG_LEN);
+    if (rc != 0) {
         ct_memzero(computed, sizeof(computed));
         ct_memzero(msg, clen);
         return -1;
     }
 
+    rc = ct_memcmp_eq(computed, tag, SAFE_TAG_LEN) ? 0 : -1;
     ct_memzero(computed, sizeof(computed));
+
+    if (rc != 0) {
+        ct_memzero(msg, clen);
+        return -1;
+    }
+
     return 0;
-}
-
-void forkskinny_safe_fenc_encrypt(const safe_key_t *ks,
-                                  const uint8_t tag[SAFE_TAG_LEN],
-                                  const uint8_t *pt, size_t ptlen,
-                                  uint8_t *ct)
-{
-    fenc_crypt(ks->key, tag, pt, ptlen, ct);
-}
-
-void forkskinny_safe_fenc_decrypt(const safe_key_t *ks,
-                                  const uint8_t tag[SAFE_TAG_LEN],
-                                  const uint8_t *ct, size_t ctlen,
-                                  uint8_t *pt)
-{
-    fenc_crypt(ks->key, tag, ct, ctlen, pt);
 }
