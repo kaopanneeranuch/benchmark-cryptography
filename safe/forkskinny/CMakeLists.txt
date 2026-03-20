@@ -3,12 +3,13 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(forkskinny)
 
-target_include_directories(app PRIVATE ../../ ../../../ForkSkinny ../../../GCTR-3)
+target_include_directories(app PRIVATE ../../ ../../ForkAE ../../GCTR-3)
 
 target_sources(app PRIVATE
 	src/main.c
 	src/bench.c
 	src/forkskinny_safe.c
-	../../../GCTR-3/gctr-3.c
-	../../../ForkSkinny/internal-forkskinny.c
+	../../GCTR-3/gctr-3.c
+	../../ForkAE/internal-forkskinny.c
+	../../ForkAE/forkae.c
 )
