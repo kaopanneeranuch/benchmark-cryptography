@@ -9,7 +9,8 @@ target_sources(app PRIVATE
 	src/main.c
 	src/bench.c
 	src/forkskinny_sonicae.c
-	../../GCTR-3/forkskinny/gctr-3.c
+	src/forkskinny_supersonic.c
+	../../GCTR-3/forkskinny/gctr-3-prime.c
 	../../ForkAE/internal-forkskinny.c
 	../../ForkAE/forkae.c
 )

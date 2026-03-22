@@ -1,0 +1,63 @@
+/* gctr-3-prime.c */
+#include "gctr-3-prime.h"
+#include "internal-forkskinny.h"
+
+#include <string.h>
+
+static void gctr3p_set_domain_10(uint8_t tweak_part[GCTR3P_N])
+{
+    /*
+     * Same packing assumption as your earlier gctr_crypt():
+     * reserved control bits live in the top 2 bits of tweak_part[0].
+     * If your local ForkSkinny packing uses another location,
+     * only this helper needs to change.
+     */
+    tweak_part[0] &= 0x3Fu;
+    tweak_part[0] |= 0x80u;   /* binary 10xxxxxx */
+}
+
+void gctr_3_prime(const uint8_t *key,
+                  const uint8_t tag[GCTR3P_TWO_N],
+                  const uint8_t *in, size_t len,
+                  uint8_t *out)
+{
+    uint8_t tk[GCTR3P_TWO_N];
+    uint8_t ctrU[GCTR3P_N];
+    size_t offset = 0u;
+
+    const uint8_t *R = tag;               /* first n bits */
+    const uint8_t *N = tag + GCTR3P_N;    /* second n bits */
+
+    /*
+     * Keep the same structure as your old gctr_crypt():
+     *   ctrU = changing counter half
+     *   tk   = tweak_part || key
+     */
+    memcpy(ctrU, N, GCTR3P_N);
+    memcpy(tk, R, GCTR3P_N);
+    gctr3p_set_domain_10(tk);
+    memcpy(tk + GCTR3P_N, key, GCTR3P_KEY_LEN);
+
+    while (offset < len) {
+        uint8_t stream[GCTR3P_TWO_N];
+        size_t take = len - offset;
+
+        if (take > GCTR3P_TWO_N)
+            take = GCTR3P_TWO_N;
+
+        forkskinny_128_256_encrypt(tk, stream, stream + GCTR3P_N, ctrU);
+
+        for (size_t j = 0; j < take; ++j) {
+            out[offset + j] = (uint8_t)(in[offset + j] ^ stream[j]);
+        }
+
+        offset += take;
+
+        /* increment ctrU as a big-endian counter */
+        for (int b = (int)GCTR3P_N - 1; b >= 0; --b) {
+            ctrU[b] = (uint8_t)(ctrU[b] + 1u);
+            if (ctrU[b] != 0u)
+                break;
+        }
+    }
+}

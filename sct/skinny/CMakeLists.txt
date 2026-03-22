@@ -3,12 +3,11 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(skinny)
 
-target_include_directories(app PRIVATE ../../ ../../skinny_tbc)
+target_include_directories(app PRIVATE ../../ ../../SKINNY-AEAD)
 
 target_sources(app PRIVATE
 	src/main.c
 	src/bench.c
 	src/skinny_sct.c
-	../../skinny_tbc/skinny_tbc.c
 	../../SKINNY-AEAD/internal-skinny128.c
 )

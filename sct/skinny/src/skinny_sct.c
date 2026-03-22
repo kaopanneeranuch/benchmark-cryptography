@@ -1,55 +1,5 @@
 #include "skinny_sct.h"
-#include "skinny_tbc.h"
 #include <string.h>
-
-/* ══════════════════════════════════════════════════════════
- *  SCT  –  Synthetic Counter in Tweak
- *  Reference: https://eprint.iacr.org/2015/1049  §4
- *
- *  Instantiation: SKINNY-128-128
- *    n = 128 (block), k = 128 (key), t = 128 (tweak)
- *    nonce = 96 bits, tag = 128 bits
- *
- *  Tweak layout (128 bits = 16 bytes):
- *    domain(4 bits) || counter(28 bits) || nonce_or_tag(96 bits)
- *
- *  Domain separation (paper §4):
- *    Hash pass (PMAC over AD then M, nonce-based tweak):
- *      0x0  AD full block          (message present)
- *      0x1  AD last block, padded  (message present)
- *      0x2  AD full block          (message empty)
- *      0x3  AD last block, padded  (message empty)
- *      0x4  Msg full block         (AD present)
- *      0x5  Msg last block, padded (AD present)
- *      0x6  Msg full block         (AD empty)
- *      0x7  Msg last block, padded (AD empty)
- *      0x8  Tag finalization
- *
- *    CTR pass (tag-based tweak, encrypt):
- *      0xC  CTR full block
- *      0xD  CTR last block (partial)
- *
- *  Algorithm (Enc):
- *    Pass 1 — PMAC hash:
- *      σ ← 0^n
- *      For each AD block A_i:
- *        σ ← σ ⊕ Ẽ_K^{d_a, i, N}(A_i)
- *      For each msg block M_i:
- *        σ ← σ ⊕ Ẽ_K^{d_m, i, N}(M_i)
- *      T ← Ẽ_K^{0x8, 0, N}(σ)
- *
- *    Pass 2 — CTR encrypt:
- *      For each msg block M_i:
- *        S_i ← Ẽ_K^{0xC, i+1, T[0..11]}(0^n)
- *        C_i ← M_i ⊕ S_i
- *
- *  Key difference from ZAFE:
- *    SKINNY is a normal TBC (one output), not a forkcipher.
- *    Hash uses the single TBC output for PMAC accumulation.
- *    CTR uses the single TBC output as keystream.
- * ══════════════════════════════════════════════════════════ */
-
-/* ── helpers ─────────────────────────────────────────────── */
 
 static void build_tweak(uint8_t tweak[16], uint8_t domain,
                         uint32_t counter, const uint8_t aux[12])
