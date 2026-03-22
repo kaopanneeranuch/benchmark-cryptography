@@ -61,8 +61,10 @@ void verify_correctness(void)
     fill_pattern(ad_buf, AD_LEN);
 #endif
 
+    skinny_ctr_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+
     /* produce ciphertext + tag using GCM API */
-    skinny_gcm_encrypt(bench_key, bench_nonce,
+    skinny_gcm_encrypt(bench_key, bench_nonce, 12,
                        ad_buf, AD_LEN,
                        pt_buf, MESSAGE_LEN,
                        ct_buf, tag_buf);
@@ -71,7 +73,7 @@ void verify_correctness(void)
     print_hex("CT[0..15]: ", ct_buf, 16);
     print_hex("TAG:       ", tag_buf, 16);
 
-    int rc = skinny_gcm_decrypt(bench_key, bench_nonce,
+    int rc = skinny_gcm_decrypt(bench_key, bench_nonce, 12,
                                 ad_buf, AD_LEN,
                                 ct_buf, MESSAGE_LEN,
                                 tag_buf, dec_buf);
@@ -126,14 +128,14 @@ static void bench_hash(void)
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         uint8_t S[16];
-        ghash(H, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, S);
+        ghash(H, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, S);
         for (int j = 0; j < 16; j++) tag_buf[j] = EkJ0[j] ^ S[j];
     }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
         uint8_t S[16];
-        ghash(H, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, S);
+        ghash(H, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, S);
         for (int j = 0; j < 16; j++) tag_buf[j] = EkJ0[j] ^ S[j];
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
@@ -200,7 +202,7 @@ static void bench_verify(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     /* produce valid ciphertext + tag first */
-    skinny_gcm_encrypt(bench_key, bench_nonce,
+    skinny_gcm_encrypt(bench_key, bench_nonce, 12,
                        ad_buf, AD_LEN,
                        pt_buf, MESSAGE_LEN,
                        ct_buf, tag_buf);

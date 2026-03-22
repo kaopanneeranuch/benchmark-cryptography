@@ -20,6 +20,17 @@ static void build_tk(uint8_t tk[32], const uint8_t key[16])
     memcpy(tk + 16, key, 16);
 }
 
+static void gcm_derive_j0(const uint8_t H[16], const uint8_t *iv, size_t iv_len, uint8_t J0[16])
+{
+    if (iv_len == 12) {
+        memset(J0, 0, 16);
+        memcpy(J0, iv, 12);
+        J0[15] = 1;
+    } else {
+        ghash(H, NULL, 0, iv, iv_len, J0);
+    }
+}
+
 void skinny_encrypt_block(const uint8_t key[16], const uint8_t in[16], uint8_t out[16])
 {
     uint8_t tk[32];
@@ -49,7 +60,8 @@ void skinny_ctr_encrypt(const uint8_t key[16], const uint8_t nonce[12], const ui
     }
 }
 
-void skinny_gcm_encrypt(const uint8_t key[16], const uint8_t nonce[12],
+void skinny_gcm_encrypt(const uint8_t key[16],
+                       const uint8_t *iv, size_t iv_len,
                        const uint8_t *aad, size_t aad_len,
                        const uint8_t *pt, size_t len,
                        uint8_t *ct, uint8_t tag[16])
@@ -62,9 +74,7 @@ void skinny_gcm_encrypt(const uint8_t key[16], const uint8_t nonce[12],
     skinny_128_256_encrypt_tk_full(tk, H, zero);
 
     uint8_t J0[16];
-    memset(J0, 0, 16);
-    memcpy(J0, nonce, 12);
-    J0[15] = 1;
+    gcm_derive_j0(H, iv, iv_len, J0);
 
     uint8_t ctr[16];
     memcpy(ctr, J0, 16);
@@ -88,7 +98,8 @@ void skinny_gcm_encrypt(const uint8_t key[16], const uint8_t nonce[12],
         tag[i] = EkJ0[i] ^ S[i];
 }
 
-int skinny_gcm_decrypt(const uint8_t key[16], const uint8_t nonce[12],
+int skinny_gcm_decrypt(const uint8_t key[16],
+                      const uint8_t *iv, size_t iv_len,
                       const uint8_t *aad, size_t aad_len,
                       const uint8_t *ct, size_t len,
                       const uint8_t tag[16], uint8_t *pt)
@@ -101,9 +112,7 @@ int skinny_gcm_decrypt(const uint8_t key[16], const uint8_t nonce[12],
     skinny_128_256_encrypt_tk_full(tk, H, zero);
 
     uint8_t J0[16];
-    memset(J0, 0, 16);
-    memcpy(J0, nonce, 12);
-    J0[15] = 1;
+    gcm_derive_j0(H, iv, iv_len, J0);
 
     uint8_t S[16];
     ghash(H, aad, aad_len, ct, len, S);

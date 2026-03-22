@@ -3,7 +3,7 @@
 #include <zephyr/timing/timing.h>
 #include "bench.h"
 
-void main(void)
+int main(void)
 {
     timing_init();
     timing_start();
@@ -14,4 +14,5 @@ void main(void)
     bench_zafe_all();
 
     timing_stop();
+    return 0;
 }
