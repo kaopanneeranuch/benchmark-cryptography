@@ -1,9 +1,26 @@
 #include "skinny_sct.h"
+#include "internal-skinny128.h"
 #include <stdint.h>
 #include <string.h>
 
 #define SCT_BLOCK_LEN 16
-#define SCT_IV_LEN    15
+#define SCT_IV_LEN 15
+
+static void sct_build_tk(uint8_t tk[32], const uint8_t key[16], const uint8_t tweak[16])
+{
+    memcpy(tk, tweak, 16);
+    memcpy(tk + 16, key, 16);
+}
+
+void skinny_encrypt(const uint8_t *key,
+                    const uint8_t tweak[16],
+                    const uint8_t in[16],
+                    uint8_t out[16])
+{
+    uint8_t tk[32];
+    sct_build_tk(tk, key, tweak);
+    skinny_128_256_encrypt_tk_full(tk, out, in);
+}
 
 static void sct_set_counter_tweak(uint8_t tweak[16], uint8_t prefix, uint64_t ctr)
 {
@@ -11,7 +28,8 @@ static void sct_set_counter_tweak(uint8_t tweak[16], uint8_t prefix, uint64_t ct
     tweak[0] = prefix;
 
     // put the 64-bit counter in the low bytes of tweak[1..15]
-    for (int i = 15; i >= 8; --i) {
+    for (int i = 15; i >= 8; --i)
+    {
         tweak[i] = (uint8_t)ctr;
         ctr >>= 8;
     }
@@ -19,7 +37,8 @@ static void sct_set_counter_tweak(uint8_t tweak[16], uint8_t prefix, uint64_t ct
 
 static void sct_inc_iv(uint8_t iv[SCT_IV_LEN])
 {
-    for (int i = SCT_IV_LEN - 1; i >= 0; --i) {
+    for (int i = SCT_IV_LEN - 1; i >= 0; --i)
+    {
         iv[i]++;
         if (iv[i] != 0)
             break;
@@ -46,7 +65,8 @@ void skinny_sct_ctrt(const sct_key_t *ks,
 
     memcpy(iv, iv_in, SCT_IV_LEN);
 
-    for (off = 0; off < len; off += SCT_BLOCK_LEN) {
+    for (off = 0; off < len; off += SCT_BLOCK_LEN)
+    {
         take = len - off;
         if (take > SCT_BLOCK_LEN)
             take = SCT_BLOCK_LEN;
@@ -98,7 +118,8 @@ void skinny_sct_hash(const sct_key_t *ks,
         auth[i] ^= tmp[i];
 
     off = 0;
-    while (off + SCT_BLOCK_LEN < adlen) {
+    while (off + SCT_BLOCK_LEN < adlen)
+    {
         sct_set_counter_tweak(tweak, 2, (uint64_t)(off / SCT_BLOCK_LEN) + 2);
         skinny_encrypt(ks->key, tweak, ad + off, tmp);
 
@@ -108,13 +129,17 @@ void skinny_sct_hash(const sct_key_t *ks,
         off += SCT_BLOCK_LEN;
     }
 
-    if (adlen > 0) {
+    if (adlen > 0)
+    {
         take = adlen - off;
 
-        if (take == SCT_BLOCK_LEN) {
+        if (take == SCT_BLOCK_LEN)
+        {
             sct_set_counter_tweak(tweak, 2, (uint64_t)(off / SCT_BLOCK_LEN) + 2);
             skinny_encrypt(ks->key, tweak, ad + off, tmp);
-        } else {
+        }
+        else
+        {
             memset(block, 0, 16);
             memcpy(block, ad + off, take);
             block[take] = 0x80;
@@ -130,7 +155,8 @@ void skinny_sct_hash(const sct_key_t *ks,
     /* Message: complete blocks use prefix 4, final partial uses prefix 5.
        Counters are 1,2,3,... */
     off = 0;
-    while (off + SCT_BLOCK_LEN < mlen) {
+    while (off + SCT_BLOCK_LEN < mlen)
+    {
         sct_set_counter_tweak(tweak, 4, (uint64_t)(off / SCT_BLOCK_LEN) + 1);
         skinny_encrypt(ks->key, tweak, msg + off, tmp);
 
@@ -140,13 +166,17 @@ void skinny_sct_hash(const sct_key_t *ks,
         off += SCT_BLOCK_LEN;
     }
 
-    if (mlen > 0) {
+    if (mlen > 0)
+    {
         take = mlen - off;
 
-        if (take == SCT_BLOCK_LEN) {
+        if (take == SCT_BLOCK_LEN)
+        {
             sct_set_counter_tweak(tweak, 4, (uint64_t)(off / SCT_BLOCK_LEN) + 1);
             skinny_encrypt(ks->key, tweak, msg + off, tmp);
-        } else {
+        }
+        else
+        {
             memset(block, 0, 16);
             memcpy(block, msg + off, take);
             block[take] = 0x80;
@@ -217,7 +247,8 @@ int skinny_sct_decrypt_verify(const sct_key_t *ks,
     for (int i = 0; i < SCT_TAG_LEN; i++)
         diff |= (unsigned)(computed[i] ^ tag[i]);
 
-    if (diff) {
+    if (diff)
+    {
         memset(msg, 0, clen);
         return -1;
     }

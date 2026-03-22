@@ -28,20 +28,25 @@ static const uint8_t bench_key[SCT_KEY_LEN] = {
     0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
     0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
 };
+
 static const uint8_t bench_nonce[SCT_NONCE_LEN] = {
     0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,
-    0xa8,0xa9,0xaa,0xab
+    0xa8,0xa9,0xaa,0xab,0xac,0xad,0xae,0xaf
 };
 
 static void fill_pattern(uint8_t *buf, size_t len)
 {
-    for (size_t i = 0; i < len; i++) buf[i] = (uint8_t)(i & 0xff);
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = (uint8_t)(i & 0xff);
+    }
 }
 
 static void print_hex(const char *label, const uint8_t *buf, size_t len)
 {
     printk("%s", label);
-    for (size_t i = 0; i < len; i++) printk("%02x", buf[i]);
+    for (size_t i = 0; i < len; i++) {
+        printk("%02x", buf[i]);
+    }
     printk("\n");
 }
 
@@ -55,6 +60,7 @@ void verify_correctness(void)
 #if AD_LEN > 0
     fill_pattern(ad_buf, AD_LEN);
 #endif
+
     skinny_sct_keygen(bench_key, &ks);
 
     skinny_sct_encrypt_auth(&ks, bench_nonce,
@@ -62,22 +68,23 @@ void verify_correctness(void)
                             pt_buf, MESSAGE_LEN,
                             ct_buf, tag_buf);
 
-    print_hex("PT[0..15]: ", pt_buf, 16);
-    print_hex("CT[0..15]: ", ct_buf, 16);
-    print_hex("TAG:       ", tag_buf, SCT_TAG_LEN);
+    print_hex("PT[0..15]:  ", pt_buf, 16);
+    print_hex("CT[0..15]:  ", ct_buf, 16);
+    print_hex("TAG:        ", tag_buf, SCT_TAG_LEN);
 
     int rc = skinny_sct_decrypt_verify(&ks, bench_nonce,
                                        ad_buf, AD_LEN,
                                        ct_buf, MESSAGE_LEN,
                                        tag_buf, dec_buf);
 
-    print_hex("DEC[0..15]:", dec_buf, 16);
-    printk("Decrypt+Verify: %s\n", rc == 0 ? "OK" : "FAIL");
+    print_hex("DEC[0..15]: ", dec_buf, 16);
+    printk("Decrypt+Verify: %s\n", (rc == 0) ? "OK" : "FAIL");
 
-    if (memcmp(pt_buf, dec_buf, MESSAGE_LEN) == 0)
+    if (memcmp(pt_buf, dec_buf, MESSAGE_LEN) == 0) {
         printk("Plaintext match: OK\n");
-    else
+    } else {
         printk("Plaintext match: FAIL\n");
+    }
 
     printk("--- End correctness ---\n\n");
 }
@@ -89,17 +96,20 @@ static void bench_keygen(void)
     timing_t start, end;
     uint64_t total_c = 0, total_ns = 0;
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
+    for (int i = 0; i < WARMUP_ITERS; i++) {
         skinny_sct_keygen(bench_key, &ks);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
         skinny_sct_keygen(bench_key, &ks);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
+
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "keygen",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
@@ -113,21 +123,26 @@ static void bench_hash(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     skinny_sct_keygen(bench_key, &ks);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
+    for (int i = 0; i < WARMUP_ITERS; i++) {
         skinny_sct_hash(&ks, bench_nonce,
                         ad_buf, AD_LEN,
-                        pt_buf, MESSAGE_LEN, tag_buf);
+                        pt_buf, MESSAGE_LEN,
+                        tag_buf);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
         skinny_sct_hash(&ks, bench_nonce,
                         ad_buf, AD_LEN,
-                        pt_buf, MESSAGE_LEN, tag_buf);
+                        pt_buf, MESSAGE_LEN,
+                        tag_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
+
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "hash (tag)",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
@@ -137,25 +152,35 @@ static void bench_encrypt(void)
 {
     timing_t start, end;
     uint64_t total_c = 0, total_ns = 0;
+    uint8_t iv[SCT_IV_LEN];
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     skinny_sct_keygen(bench_key, &ks);
+
     skinny_sct_hash(&ks, bench_nonce,
                     ad_buf, AD_LEN,
-                    pt_buf, MESSAGE_LEN, tag_buf);
+                    pt_buf, MESSAGE_LEN,
+                    tag_buf);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
-        skinny_sct_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
+    memcpy(iv, tag_buf, SCT_IV_LEN);
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        skinny_sct_ctrt(&ks, bench_nonce, iv,
+                        pt_buf, MESSAGE_LEN, ct_buf);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        skinny_sct_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
+        skinny_sct_ctrt(&ks, bench_nonce, iv,
+                        pt_buf, MESSAGE_LEN, ct_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "encrypt",
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "ctrt enc",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
@@ -164,26 +189,35 @@ static void bench_decrypt(void)
 {
     timing_t start, end;
     uint64_t total_c = 0, total_ns = 0;
+    uint8_t iv[SCT_IV_LEN];
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     skinny_sct_keygen(bench_key, &ks);
+
     skinny_sct_encrypt_auth(&ks, bench_nonce,
                             ad_buf, AD_LEN,
                             pt_buf, MESSAGE_LEN,
                             ct_buf, tag_buf);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
-        skinny_sct_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
+    memcpy(iv, tag_buf, SCT_IV_LEN);
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        skinny_sct_ctrt(&ks, bench_nonce, iv,
+                        ct_buf, MESSAGE_LEN, dec_buf);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        skinny_sct_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
+        skinny_sct_ctrt(&ks, bench_nonce, iv,
+                        ct_buf, MESSAGE_LEN, dec_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "decrypt",
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "ctrt dec",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
@@ -195,26 +229,104 @@ static void bench_verify(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     skinny_sct_keygen(bench_key, &ks);
+
     skinny_sct_hash(&ks, bench_nonce,
                     ad_buf, AD_LEN,
-                    pt_buf, MESSAGE_LEN, tag_buf);
+                    pt_buf, MESSAGE_LEN,
+                    tag_buf);
 
-    for (int i = 0; i < WARMUP_ITERS; i++)
+    for (int i = 0; i < WARMUP_ITERS; i++) {
         skinny_sct_verify(&ks, bench_nonce,
                           ad_buf, AD_LEN,
-                          pt_buf, MESSAGE_LEN, tag_buf);
+                          pt_buf, MESSAGE_LEN,
+                          tag_buf);
+    }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
         skinny_sct_verify(&ks, bench_nonce,
                           ad_buf, AD_LEN,
-                          pt_buf, MESSAGE_LEN, tag_buf);
+                          pt_buf, MESSAGE_LEN,
+                          tag_buf);
         end = timing_counter_get();
+
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
         total_ns += timing_cycles_to_ns(c);
     }
+
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "verify",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+}
+
+/* full AEAD path */
+static void bench_encrypt_auth(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    skinny_sct_keygen(bench_key, &ks);
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        skinny_sct_encrypt_auth(&ks, bench_nonce,
+                                ad_buf, AD_LEN,
+                                pt_buf, MESSAGE_LEN,
+                                ct_buf, tag_buf);
+    }
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        start = timing_counter_get();
+        skinny_sct_encrypt_auth(&ks, bench_nonce,
+                                ad_buf, AD_LEN,
+                                pt_buf, MESSAGE_LEN,
+                                ct_buf, tag_buf);
+        end = timing_counter_get();
+
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "enc+auth",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+}
+
+static void bench_decrypt_verify(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    skinny_sct_keygen(bench_key, &ks);
+    skinny_sct_encrypt_auth(&ks, bench_nonce,
+                            ad_buf, AD_LEN,
+                            pt_buf, MESSAGE_LEN,
+                            ct_buf, tag_buf);
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        skinny_sct_decrypt_verify(&ks, bench_nonce,
+                                  ad_buf, AD_LEN,
+                                  ct_buf, MESSAGE_LEN,
+                                  tag_buf, dec_buf);
+    }
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        start = timing_counter_get();
+        skinny_sct_decrypt_verify(&ks, bench_nonce,
+                                  ad_buf, AD_LEN,
+                                  ct_buf, MESSAGE_LEN,
+                                  tag_buf, dec_buf);
+        end = timing_counter_get();
+
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "dec+verify",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
@@ -231,6 +343,8 @@ void bench_sct_all(void)
     bench_encrypt();
     bench_decrypt();
     bench_verify();
+    bench_encrypt_auth();
+    bench_decrypt_verify();
 
     printk("--- Benchmark complete ---\n\n");
 }
