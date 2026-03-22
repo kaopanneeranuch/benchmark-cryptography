@@ -1,168 +1,169 @@
 #include "skinny_sct.h"
+#include <stdint.h>
 #include <string.h>
 
-static void build_tweak(uint8_t tweak[16], uint8_t domain,
-                        uint32_t counter, const uint8_t aux[12])
+#define SCT_BLOCK_LEN 16
+#define SCT_IV_LEN    15
+
+static void sct_set_counter_tweak(uint8_t tweak[16], uint8_t prefix, uint64_t ctr)
 {
-    tweak[0] = (uint8_t)((domain << 4) | ((counter >> 24) & 0x0F));
-    tweak[1] = (uint8_t)((counter >> 16) & 0xFF);
-    tweak[2] = (uint8_t)((counter >>  8) & 0xFF);
-    tweak[3] = (uint8_t)( counter        & 0xFF);
-    memcpy(tweak + 4, aux, 12);
-}
+    memset(tweak, 0, 16);
+    tweak[0] = prefix;
 
-static void xor_block(uint8_t *dst, const uint8_t *a, const uint8_t *b,
-                      size_t len)
-{
-    for (size_t i = 0; i < len; i++) dst[i] = a[i] ^ b[i];
-}
-
-static void pad_block(uint8_t padded[16], const uint8_t *src, size_t len)
-{
-    memset(padded, 0, 16);
-    memcpy(padded, src, len);
-    padded[len] = 0x80;
-}
-
-/* ── process AD blocks in hash pass ──────────────────────── */
-
-static void process_ad(const sct_key_t *ks,
-                       const uint8_t nonce[SCT_NONCE_LEN],
-                       const uint8_t *ad, size_t adlen,
-                       int has_msg,
-                       uint8_t sigma[16])
-{
-    if (adlen == 0) return;
-
-    uint8_t tweak[16], out[16], padded[16];
-    uint8_t d_full = has_msg ? 0x0 : 0x2;
-    uint8_t d_last = has_msg ? 0x1 : 0x3;
-
-    size_t full = adlen / 16;
-    size_t rem  = adlen % 16;
-
-    for (size_t i = 0; i < full; i++) {
-        build_tweak(tweak, d_full, (uint32_t)i, nonce);
-        skinny_encrypt(ks->key, tweak, ad + i * 16, out);
-        xor_block(sigma, sigma, out, 16);
-    }
-
-    if (rem > 0) {
-        pad_block(padded, ad + full * 16, rem);
-        build_tweak(tweak, d_last, (uint32_t)full, nonce);
-        skinny_encrypt(ks->key, tweak, padded, out);
-        xor_block(sigma, sigma, out, 16);
+    // put the 64-bit counter in the low bytes of tweak[1..15]
+    for (int i = 15; i >= 8; --i) {
+        tweak[i] = (uint8_t)ctr;
+        ctr >>= 8;
     }
 }
 
-/* ── tag finalization ────────────────────────────────────── */
+static void sct_inc_iv(uint8_t iv[SCT_IV_LEN])
+{
+    for (int i = SCT_IV_LEN - 1; i >= 0; --i) {
+        iv[i]++;
+        if (iv[i] != 0)
+            break;
+    }
+}
 
-static void finalize_tag(const sct_key_t *ks,
-                         const uint8_t nonce[SCT_NONCE_LEN],
-                         const uint8_t sigma[16],
-                         uint8_t tag[SCT_TAG_LEN])
+/*
+ * CTRT:
+ *   C_i = M_i xor E_K^{(1, IV)}(N)
+ *   IV  = Inc(IV)
+ *
+ * Same function for encrypt and decrypt.
+ */
+void skinny_sct_ctrt(const sct_key_t *ks,
+                     const uint8_t nonce[SCT_NONCE_LEN],
+                     const uint8_t iv_in[SCT_IV_LEN],
+                     const uint8_t *in, size_t len,
+                     uint8_t *out)
 {
     uint8_t tweak[16];
-    build_tweak(tweak, 0x8, 0, nonce);
-    skinny_encrypt(ks->key, tweak, sigma, tag);
+    uint8_t stream[16];
+    uint8_t iv[SCT_IV_LEN];
+    size_t off, take;
+
+    memcpy(iv, iv_in, SCT_IV_LEN);
+
+    for (off = 0; off < len; off += SCT_BLOCK_LEN) {
+        take = len - off;
+        if (take > SCT_BLOCK_LEN)
+            take = SCT_BLOCK_LEN;
+
+        tweak[0] = 1;
+        memcpy(tweak + 1, iv, SCT_IV_LEN);
+
+        skinny_encrypt(ks->key, tweak, nonce, stream);
+
+        for (size_t j = 0; j < take; j++)
+            out[off + j] = in[off + j] ^ stream[j];
+
+        sct_inc_iv(iv);
+    }
 }
 
-/* ── SCT key setup ──────────────────────────────────────── */
-
-void skinny_sct_keygen(const uint8_t key[SCT_KEY_LEN],
-                       sct_key_t *ks)
+void skinny_sct_keygen(const uint8_t key[SCT_KEY_LEN], sct_key_t *ks)
 {
     memcpy(ks->key, key, SCT_KEY_LEN);
 }
 
-/* ────────────────────────────────────────────────────────
- *  Hash pass: PMAC over (AD, M) using nonce tweak → tag T
- * ──────────────────────────────────────────────────────── */
+/*
+ * EPWC:
+ *   auth := E^(2,0)(N) xor E^(2,1)(N)
+ *   xor in AD blocks with prefixes 2/3
+ *   xor in M  blocks with prefixes 4/5
+ *   tag := E^(4,0)(auth)
+ */
 void skinny_sct_hash(const sct_key_t *ks,
                      const uint8_t nonce[SCT_NONCE_LEN],
                      const uint8_t *ad, size_t adlen,
                      const uint8_t *msg, size_t mlen,
                      uint8_t tag[SCT_TAG_LEN])
 {
-    uint8_t tweak[16], out[16], padded[16];
-    uint8_t sigma[16];
-    memset(sigma, 0, 16);
+    uint8_t tweak[16];
+    uint8_t auth[16];
+    uint8_t tmp[16];
+    uint8_t block[16];
+    size_t off, take;
 
-    int has_ad  = (adlen > 0);
-    int has_msg = (mlen  > 0);
+    /* auth = E^(2,0)(N) xor E^(2,1)(N) */
+    sct_set_counter_tweak(tweak, 2, 0);
+    skinny_encrypt(ks->key, tweak, nonce, auth);
 
-    /* AD blocks */
-    process_ad(ks, nonce, ad, adlen, has_msg, sigma);
+    sct_set_counter_tweak(tweak, 2, 1);
+    skinny_encrypt(ks->key, tweak, nonce, tmp);
 
-    /* Message blocks */
-    if (has_msg) {
-        uint8_t d_full = has_ad ? 0x4 : 0x6;
-        uint8_t d_last = has_ad ? 0x5 : 0x7;
+    for (int i = 0; i < 16; i++)
+        auth[i] ^= tmp[i];
 
-        size_t full = mlen / 16;
-        size_t rem  = mlen % 16;
+    off = 0;
+    while (off + SCT_BLOCK_LEN < adlen) {
+        sct_set_counter_tweak(tweak, 2, (uint64_t)(off / SCT_BLOCK_LEN) + 2);
+        skinny_encrypt(ks->key, tweak, ad + off, tmp);
 
-        for (size_t i = 0; i < full; i++) {
-            build_tweak(tweak, d_full, (uint32_t)i, nonce);
-            skinny_encrypt(ks->key, tweak, msg + i * 16, out);
-            xor_block(sigma, sigma, out, 16);
+        for (int i = 0; i < 16; i++)
+            auth[i] ^= tmp[i];
+
+        off += SCT_BLOCK_LEN;
+    }
+
+    if (adlen > 0) {
+        take = adlen - off;
+
+        if (take == SCT_BLOCK_LEN) {
+            sct_set_counter_tweak(tweak, 2, (uint64_t)(off / SCT_BLOCK_LEN) + 2);
+            skinny_encrypt(ks->key, tweak, ad + off, tmp);
+        } else {
+            memset(block, 0, 16);
+            memcpy(block, ad + off, take);
+            block[take] = 0x80;
+
+            sct_set_counter_tweak(tweak, 3, (uint64_t)(off / SCT_BLOCK_LEN) + 2);
+            skinny_encrypt(ks->key, tweak, block, tmp);
         }
 
-        if (rem > 0) {
-            pad_block(padded, msg + full * 16, rem);
-            build_tweak(tweak, d_last, (uint32_t)full, nonce);
-            skinny_encrypt(ks->key, tweak, padded, out);
-            xor_block(sigma, sigma, out, 16);
+        for (int i = 0; i < 16; i++)
+            auth[i] ^= tmp[i];
+    }
+
+    /* Message: complete blocks use prefix 4, final partial uses prefix 5.
+       Counters are 1,2,3,... */
+    off = 0;
+    while (off + SCT_BLOCK_LEN < mlen) {
+        sct_set_counter_tweak(tweak, 4, (uint64_t)(off / SCT_BLOCK_LEN) + 1);
+        skinny_encrypt(ks->key, tweak, msg + off, tmp);
+
+        for (int i = 0; i < 16; i++)
+            auth[i] ^= tmp[i];
+
+        off += SCT_BLOCK_LEN;
+    }
+
+    if (mlen > 0) {
+        take = mlen - off;
+
+        if (take == SCT_BLOCK_LEN) {
+            sct_set_counter_tweak(tweak, 4, (uint64_t)(off / SCT_BLOCK_LEN) + 1);
+            skinny_encrypt(ks->key, tweak, msg + off, tmp);
+        } else {
+            memset(block, 0, 16);
+            memcpy(block, msg + off, take);
+            block[take] = 0x80;
+
+            sct_set_counter_tweak(tweak, 5, (uint64_t)(off / SCT_BLOCK_LEN) + 1);
+            skinny_encrypt(ks->key, tweak, block, tmp);
         }
+
+        for (int i = 0; i < 16; i++)
+            auth[i] ^= tmp[i];
     }
 
-    finalize_tag(ks, nonce, sigma, tag);
+    /* tag = E^(4,0)(auth) */
+    sct_set_counter_tweak(tweak, 4, 0);
+    skinny_encrypt(ks->key, tweak, auth, tag);
 }
 
-/* ────────────────────────────────────────────────────────
- *  CTR encrypt pass: keystream from Ẽ_K(0^n) with tag tweak.
- * ──────────────────────────────────────────────────────── */
-void skinny_sct_encrypt(const sct_key_t *ks,
-                        const uint8_t tag[SCT_TAG_LEN],
-                        const uint8_t *msg, size_t mlen,
-                        uint8_t *ct)
-{
-    uint8_t tweak[16], out[16];
-    uint8_t zero[16];
-    uint8_t tag12[12];
-    memset(zero, 0, 16);
-    memcpy(tag12, tag, 12);
-
-    size_t full = mlen / 16;
-    size_t rem  = mlen % 16;
-
-    for (size_t i = 0; i < full; i++) {
-        build_tweak(tweak, 0xC, (uint32_t)(i + 1), tag12);
-        skinny_encrypt(ks->key, tweak, zero, out);
-        xor_block(ct + i * 16, msg + i * 16, out, 16);
-    }
-
-    if (rem > 0) {
-        build_tweak(tweak, 0xD, (uint32_t)(full + 1), tag12);
-        skinny_encrypt(ks->key, tweak, zero, out);
-        xor_block(ct + full * 16, msg + full * 16, out, rem);
-    }
-}
-
-/* ────────────────────────────────────────────────────────
- *  CTR decrypt pass: symmetric to encrypt.
- * ──────────────────────────────────────────────────────── */
-void skinny_sct_decrypt(const sct_key_t *ks,
-                        const uint8_t tag[SCT_TAG_LEN],
-                        const uint8_t *ct, size_t clen,
-                        uint8_t *msg)
-{
-    skinny_sct_encrypt(ks, tag, ct, clen, msg);
-}
-
-/* ────────────────────────────────────────────────────────
- *  Verify: recompute tag from plaintext, compare.
- * ──────────────────────────────────────────────────────── */
 int skinny_sct_verify(const sct_key_t *ks,
                       const uint8_t nonce[SCT_NONCE_LEN],
                       const uint8_t *ad, size_t adlen,
@@ -170,19 +171,16 @@ int skinny_sct_verify(const sct_key_t *ks,
                       const uint8_t tag[SCT_TAG_LEN])
 {
     uint8_t computed[SCT_TAG_LEN];
+    unsigned diff = 0;
+
     skinny_sct_hash(ks, nonce, ad, adlen, msg, mlen, computed);
 
-    int diff = 0;
     for (int i = 0; i < SCT_TAG_LEN; i++)
-        diff |= computed[i] ^ tag[i];
-    return (diff == 0) ? 0 : -1;
+        diff |= (unsigned)(computed[i] ^ tag[i]);
+
+    return diff ? -1 : 0;
 }
 
-/* ────────────────────────────────────────────────────────
- *  Enc(K, N, A, M) → (C, T)
- *    Pass 1: hash(K, N, A, M) → T
- *    Pass 2: ctr_enc(K, T, M) → C
- * ──────────────────────────────────────────────────────── */
 void skinny_sct_encrypt_auth(const sct_key_t *ks,
                              const uint8_t nonce[SCT_NONCE_LEN],
                              const uint8_t *ad, size_t adlen,
@@ -190,15 +188,16 @@ void skinny_sct_encrypt_auth(const sct_key_t *ks,
                              uint8_t *ct,
                              uint8_t tag[SCT_TAG_LEN])
 {
+    uint8_t iv[SCT_IV_LEN];
+
     skinny_sct_hash(ks, nonce, ad, adlen, msg, mlen, tag);
-    skinny_sct_encrypt(ks, tag, msg, mlen, ct);
+
+    /* Conv(tag): truncate 16-byte tag to 15-byte IV */
+    memcpy(iv, tag, SCT_IV_LEN);
+
+    skinny_sct_ctrt(ks, nonce, iv, msg, mlen, ct);
 }
 
-/* ────────────────────────────────────────────────────────
- *  Dec(K, N, A, C, T) → M or ⊥
- *    Pass 1: ctr_dec(K, T, C) → M
- *    Pass 2: verify hash(K, N, A, M) == T
- * ──────────────────────────────────────────────────────── */
 int skinny_sct_decrypt_verify(const sct_key_t *ks,
                               const uint8_t nonce[SCT_NONCE_LEN],
                               const uint8_t *ad, size_t adlen,
@@ -206,18 +205,22 @@ int skinny_sct_decrypt_verify(const sct_key_t *ks,
                               const uint8_t tag[SCT_TAG_LEN],
                               uint8_t *msg)
 {
-    skinny_sct_decrypt(ks, tag, ct, clen, msg);
-
+    uint8_t iv[SCT_IV_LEN];
     uint8_t computed[SCT_TAG_LEN];
+    unsigned diff = 0;
+
+    memcpy(iv, tag, SCT_IV_LEN);
+    skinny_sct_ctrt(ks, nonce, iv, ct, clen, msg);
+
     skinny_sct_hash(ks, nonce, ad, adlen, msg, clen, computed);
 
-    int diff = 0;
     for (int i = 0; i < SCT_TAG_LEN; i++)
-        diff |= computed[i] ^ tag[i];
+        diff |= (unsigned)(computed[i] ^ tag[i]);
 
-    if (diff != 0) {
+    if (diff) {
         memset(msg, 0, clen);
         return -1;
     }
+
     return 0;
 }
