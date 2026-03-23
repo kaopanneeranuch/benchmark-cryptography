@@ -260,77 +260,6 @@ static void bench_verify(void)
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
 
-/* full AEAD path */
-static void bench_encrypt_auth(void)
-{
-    timing_t start, end;
-    uint64_t total_c = 0, total_ns = 0;
-
-    fill_pattern(pt_buf, MESSAGE_LEN);
-    skinny_sct_keygen(bench_key, &ks);
-
-    for (int i = 0; i < WARMUP_ITERS; i++) {
-        skinny_sct_encrypt_auth(&ks, bench_nonce,
-                                ad_buf, AD_LEN,
-                                pt_buf, MESSAGE_LEN,
-                                ct_buf, tag_buf);
-    }
-
-    for (int i = 0; i < BENCH_ITERS; i++) {
-        start = timing_counter_get();
-        skinny_sct_encrypt_auth(&ks, bench_nonce,
-                                ad_buf, AD_LEN,
-                                pt_buf, MESSAGE_LEN,
-                                ct_buf, tag_buf);
-        end = timing_counter_get();
-
-        uint64_t c = timing_cycles_get(&start, &end);
-        total_c  += c;
-        total_ns += timing_cycles_to_ns(c);
-    }
-
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "enc+auth",
-           (unsigned long long)(total_c / BENCH_ITERS),
-           (unsigned long long)(total_ns / BENCH_ITERS));
-}
-
-static void bench_decrypt_verify(void)
-{
-    timing_t start, end;
-    uint64_t total_c = 0, total_ns = 0;
-
-    fill_pattern(pt_buf, MESSAGE_LEN);
-    skinny_sct_keygen(bench_key, &ks);
-    skinny_sct_encrypt_auth(&ks, bench_nonce,
-                            ad_buf, AD_LEN,
-                            pt_buf, MESSAGE_LEN,
-                            ct_buf, tag_buf);
-
-    for (int i = 0; i < WARMUP_ITERS; i++) {
-        skinny_sct_decrypt_verify(&ks, bench_nonce,
-                                  ad_buf, AD_LEN,
-                                  ct_buf, MESSAGE_LEN,
-                                  tag_buf, dec_buf);
-    }
-
-    for (int i = 0; i < BENCH_ITERS; i++) {
-        start = timing_counter_get();
-        skinny_sct_decrypt_verify(&ks, bench_nonce,
-                                  ad_buf, AD_LEN,
-                                  ct_buf, MESSAGE_LEN,
-                                  tag_buf, dec_buf);
-        end = timing_counter_get();
-
-        uint64_t c = timing_cycles_get(&start, &end);
-        total_c  += c;
-        total_ns += timing_cycles_to_ns(c);
-    }
-
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "dec+verify",
-           (unsigned long long)(total_c / BENCH_ITERS),
-           (unsigned long long)(total_ns / BENCH_ITERS));
-}
-
 /* ── top-level entry ───────────────────────────────────── */
 void bench_sct_all(void)
 {
@@ -343,8 +272,6 @@ void bench_sct_all(void)
     bench_encrypt();
     bench_decrypt();
     bench_verify();
-    bench_encrypt_auth();
-    bench_decrypt_verify();
 
     printk("--- Benchmark complete ---\n\n");
 }

@@ -1,4 +1,3 @@
-/* gctr-3-prime.h */
 #ifndef GCTR_3_PRIME_H
 #define GCTR_3_PRIME_H
 

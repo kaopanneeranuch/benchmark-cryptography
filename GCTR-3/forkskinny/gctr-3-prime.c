@@ -6,14 +6,8 @@
 
 static void gctr3p_set_domain_10(uint8_t tweak_part[GCTR3P_N])
 {
-    /*
-     * Same packing assumption as your earlier gctr_crypt():
-     * reserved control bits live in the top 2 bits of tweak_part[0].
-     * If your local ForkSkinny packing uses another location,
-     * only this helper needs to change.
-     */
     tweak_part[0] &= 0x3Fu;
-    tweak_part[0] |= 0x80u;   /* binary 10xxxxxx */
+    tweak_part[0] |= 0x80u;   
 }
 
 void gctr_3_prime(const uint8_t *key,
@@ -28,11 +22,6 @@ void gctr_3_prime(const uint8_t *key,
     const uint8_t *R = tag;               /* first n bits */
     const uint8_t *N = tag + GCTR3P_N;    /* second n bits */
 
-    /*
-     * Keep the same structure as your old gctr_crypt():
-     *   ctrU = changing counter half
-     *   tk   = tweak_part || key
-     */
     memcpy(ctrU, N, GCTR3P_N);
     memcpy(tk, R, GCTR3P_N);
     gctr3p_set_domain_10(tk);
