@@ -10,19 +10,20 @@
 #define GCTR3_KEY_LEN 16
 
 void gctr_crypt(const uint8_t *key,
-                       const uint8_t *iv,
-                       const uint8_t *in, size_t len,
-                       uint8_t *out)
+                const uint8_t iv[GCTR3_TWO_N],
+                const uint8_t *in, size_t len,
+                uint8_t *out)
 {
     uint8_t tk[GCTR3_TWO_N];
     uint8_t ctrU[GCTR3_N];
     size_t offset = 0;
 
-    /* tk = (1 || V) || K, ctrU = U where iv = U || V */
     memcpy(ctrU, iv, GCTR3_N);
     memcpy(tk, iv + GCTR3_N, GCTR3_N);
-    tk[0] &= 0x7FU;
-    tk[0] |= 0x80U;
+
+    /* Force tweak to 1 || V */
+    tk[0] &= 0x7F;
+    tk[0] |= 0x80;
     memcpy(tk + GCTR3_N, key, GCTR3_KEY_LEN);
 
     while (offset < len) {
@@ -31,17 +32,16 @@ void gctr_crypt(const uint8_t *key,
 
         forkskinny_128_256_encrypt(tk, stream, stream + GCTR3_N, ctrU);
 
-        for (size_t j = 0; j < take; ++j) {
+        for (size_t j = 0; j < take; ++j)
             out[offset + j] = (uint8_t)(in[offset + j] ^ stream[j]);
-        }
 
         offset += take;
 
+        /* ctrU <- ctrU + 1 (big-endian) */
         for (int b = GCTR3_N - 1; b >= 0; --b) {
             ctrU[b] = (uint8_t)(ctrU[b] + 1U);
-            if (ctrU[b] != 0U) {
+            if (ctrU[b] != 0U)
                 break;
-            }
         }
     }
 }

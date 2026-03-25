@@ -7,10 +7,10 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define N       16
-#define TWO_N   32
-#define KEY_LEN 16
-#define SAFE_IV_LEN 32
+#define N            16
+#define TWO_N        32
+#define KEY_LEN      16
+#define SAFE_IV_LEN  32
 
 static void ct_memzero(void *p, size_t n)
 {
@@ -29,7 +29,10 @@ static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
     return diff == 0;
 }
 
-// gf multiplication
+/* ------------------------------------------------------------------------- */
+/* GF(2^256) multiplication                                                  */
+/* ------------------------------------------------------------------------- */
+
 static void xor32(uint8_t dst[32], const uint8_t src[32])
 {
     for (int i = 0; i < 32; i++) {
@@ -63,9 +66,9 @@ static void gf_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
                 shl1_32(v);
 
                 if (msb) {
-                    /* XOR low terms: x^10 + x^5 + x^2 + 1 */
-                    v[30] ^= 0x04; /* x^10 */
-                    v[31] ^= 0x25; /* x^5 + x^2 + 1 */
+                    /* x^256 = x^10 + x^5 + x^2 + 1 */
+                    v[30] ^= 0x04U;
+                    v[31] ^= 0x25U;
                 }
             }
         }
@@ -74,12 +77,20 @@ static void gf_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
     memcpy(out, z, 32);
 }
 
-// pad10
+/* ------------------------------------------------------------------------- */
+/* Pad10 + length encoding                                                   */
+/* ------------------------------------------------------------------------- */
+
+static size_t pad10_len(size_t len)
+{
+    return len + 1 + ((TWO_N - ((len + 1) % TWO_N)) % TWO_N);
+}
+
 static size_t pad10(uint8_t *out, const uint8_t *in, size_t len)
 {
-    size_t padded_len = len + 1 + ((TWO_N - ((len + 1) % TWO_N)) % TWO_N);
+    size_t padded_len = pad10_len(len);
 
-    if (len > 0) {
+    if (len > 0 && in != NULL) {
         memcpy(out, in, len);
     }
 
@@ -91,7 +102,6 @@ static size_t pad10(uint8_t *out, const uint8_t *in, size_t len)
     return padded_len;
 }
 
-// SFMac
 static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
 {
     uint64_t hi = ((uint64_t)len_bytes) >> 61;
@@ -110,18 +120,92 @@ static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
     }
 }
 
+/* ------------------------------------------------------------------------- */
+/* SAFE bit handling                                                         */
+/* ------------------------------------------------------------------------- */
+
+/* Shift a 128-bit big-endian value right by 1 bit. */
+static void be128_rshift1(uint8_t x[16])
+{
+    uint8_t carry = 0;
+    for (int i = 0; i < 16; i++) {
+        uint8_t next_carry = (uint8_t)(x[i] & 1U);
+        x[i] = (uint8_t)((x[i] >> 1) | (carry << 7));
+        carry = next_carry;
+    }
+}
+
+/* For n=128, t=127:
+ * U = first 128 bits
+ * V = next 127 bits
+ *
+ * Internal V representation:
+ *   bit 127 reserved for domain bit
+ *   bits 126..0 hold the actual V
+ */
+static void split_u_v_255(const uint8_t s[32], uint8_t U[16], uint8_t V[16])
+{
+    memcpy(U, s, 16);
+    memcpy(V, s + 16, 16);
+    be128_rshift1(V);
+}
+
+/* Build tweak = b || V_rep and append key for ForkSkinny-128-256. */
+static void make_tk(uint8_t tk[32],
+                    const uint8_t key[KEY_LEN],
+                    uint8_t domain_bit,
+                    const uint8_t V[16])
+{
+    memcpy(tk, V, 16);
+    tk[0] &= 0x7FU;
+    tk[0] |= (uint8_t)((domain_bit & 1U) << 7);
+    memcpy(tk + 16, key, KEY_LEN);
+}
+
+/* F_K^{b||V}(U) -> 32-byte output = left || right */
+static void tprf_eval_32(const uint8_t key[KEY_LEN],
+                         uint8_t domain_bit,
+                         const uint8_t V[16],
+                         const uint8_t U[16],
+                         uint8_t out[32])
+{
+    uint8_t tk[32];
+    make_tk(tk, key, domain_bit, V);
+    forkskinny_128_256_encrypt(tk, out, out + 16, U);
+}
+
+/* Convert raw SAFE tag to preformatted IV = U || V_rep for gctr_crypt(). */
+static void safe_iv_from_tag(const uint8_t tag[SAFE_TAG_LEN],
+                             uint8_t iv[SAFE_IV_LEN])
+{
+    uint8_t U[16];
+    uint8_t V[16];
+
+    split_u_v_255(tag, U, V);
+    memcpy(iv, U, 16);
+    memcpy(iv + 16, V, 16);
+
+    ct_memzero(U, sizeof(U));
+    ct_memzero(V, sizeof(V));
+}
+
+/* ------------------------------------------------------------------------- */
+/* SFMac                                                                     */
+/* ------------------------------------------------------------------------- */
+
 int sfmac(const uint8_t key[KEY_LEN],
           const uint8_t *ad, size_t ad_len,
           const uint8_t *msg, size_t msg_len,
           uint8_t *tag, size_t tag_len)
 {
-    uint8_t T[TWO_N];
+    uint8_t T[TWO_N] = {0};
     uint8_t L[TWO_N];
-    uint8_t tk[TWO_N];
-    uint8_t zero[N] = {0};
+    uint8_t zeroU[N] = {0};
+    uint8_t zeroV[N] = {0};
     uint8_t tmp[TWO_N];
     uint8_t U[N];
-
+    uint8_t V[N];
+    uint8_t Y[TWO_N];
     uint8_t *X;
     size_t a_pad_len, m_pad_len, x_len;
     size_t off = 0;
@@ -136,12 +220,11 @@ int sfmac(const uint8_t key[KEY_LEN],
         return -1;
     }
 
-    /* lengths after Pad10 */
-    a_pad_len = ad_len + 1 + ((TWO_N - ((ad_len + 1) % TWO_N)) % TWO_N);
-    m_pad_len = msg_len + 1 + ((TWO_N - ((msg_len + 1) % TWO_N)) % TWO_N);
-
-    /* X = Pad10(A) || Pad10(M) || |A|_n || |M|_n */
+    /* X = Pad10(A) || Pad10(M) || <|A|>_n || <|M|>_n */
+    a_pad_len = pad10_len(ad_len);
+    m_pad_len = pad10_len(msg_len);
     x_len = a_pad_len + m_pad_len + TWO_N;
+
     X = (uint8_t *)malloc(x_len);
     if (!X) {
         return -1;
@@ -152,19 +235,13 @@ int sfmac(const uint8_t key[KEY_LEN],
 
     encode_bitlen_be128(X + off, ad_len);
     off += N;
-
     encode_bitlen_be128(X + off, msg_len);
     off += N;
 
-    /* T <- 0^(2n) */
-    memset(T, 0, TWO_N);
+    /* L <- [F_K^(0^(t+1))(0^n)]_(2n) */
+    tprf_eval_32(key, 0, zeroV, zeroU, L);
 
-    /* L <- [ F_K^(0^(t+1))(0^n) ]_(2n) */
-    memset(tk, 0, TWO_N);         /* tweak = 0...0 */
-    memcpy(tk + N, key, KEY_LEN); /* tk = tweak || key */
-    forkskinny_128_256_encrypt(tk, L, L + N, zero);
-
-    /* for each 32-byte block: T <- (T XOR X[i]) gf_mul L */
+    /* T <- (T xor X[i]) ⊗ L for each 32-byte block */
     for (size_t i = 0; i < x_len; i += TWO_N) {
         for (size_t j = 0; j < TWO_N; ++j) {
             tmp[j] = (uint8_t)(T[j] ^ X[i + j]);
@@ -172,28 +249,23 @@ int sfmac(const uint8_t key[KEY_LEN],
         gf_mul(T, tmp, L);
     }
 
-    /* U || V <- [T]_(n+t) */
-    memcpy(U, T, N);
-    memcpy(tk, T + N, N);
-
-    /* force tweak to (0 || V) */
-    tk[0] &= 0x7FU;
-    memcpy(tk + N, key, KEY_LEN);
+    /* U || V <- [T]_(n+t) with n+t = 255 */
+    split_u_v_255(T, U, V);
 
     /* T <- F_K^(0 || V)(U) */
-    forkskinny_128_256_encrypt(tk, T, T + N, U);
+    tprf_eval_32(key, 0, V, U, Y);
 
-    /* return first tag_len bytes */
-    memcpy(tag, T, tag_len);
+    memcpy(tag, Y, tag_len);
 
     free(X);
-    return 0;
-}
+    ct_memzero(L, sizeof(L));
+    ct_memzero(T, sizeof(T));
+    ct_memzero(tmp, sizeof(tmp));
+    ct_memzero(U, sizeof(U));
+    ct_memzero(V, sizeof(V));
+    ct_memzero(Y, sizeof(Y));
 
-static void safe_iv_from_tag(const uint8_t tag[SAFE_TAG_LEN],
-                             uint8_t iv[SAFE_IV_LEN])
-{
-    memcpy(iv, tag, SAFE_IV_LEN);
+    return 0;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -262,7 +334,6 @@ int forkskinny_safe_encrypt_auth(const safe_key_t *ks,
                                  uint8_t *ct,
                                  uint8_t tag[SAFE_TAG_LEN])
 {
-    uint8_t iv[SAFE_IV_LEN];
     int rc;
 
     rc = sfmac(ks->key, ad, adlen, msg, mlen, tag, SAFE_TAG_LEN);
@@ -270,10 +341,7 @@ int forkskinny_safe_encrypt_auth(const safe_key_t *ks,
         return -1;
     }
 
-    safe_iv_from_tag(tag, iv);
-    gctr_crypt(ks->key, iv, msg, mlen, ct);
-    ct_memzero(iv, sizeof(iv));
-
+    forkskinny_safe_encrypt(ks, tag, msg, mlen, ct);
     return 0;
 }
 
@@ -283,13 +351,10 @@ int forkskinny_safe_decrypt_verify(const safe_key_t *ks,
                                    const uint8_t tag[SAFE_TAG_LEN],
                                    uint8_t *msg)
 {
-    uint8_t iv[SAFE_IV_LEN];
     uint8_t computed[SAFE_TAG_LEN];
     int rc;
 
-    safe_iv_from_tag(tag, iv);
-    gctr_crypt(ks->key, iv, ct, clen, msg);
-    ct_memzero(iv, sizeof(iv));
+    forkskinny_safe_decrypt(ks, tag, ct, clen, msg);
 
     rc = sfmac(ks->key, ad, adlen, msg, clen, computed, SAFE_TAG_LEN);
     if (rc != 0) {

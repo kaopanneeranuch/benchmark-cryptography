@@ -33,7 +33,7 @@ static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
     return diff == 0;
 }
 
-static void xor_block(uint8_t *dst, const uint8_t *src, size_t len)
+static void xor_into(uint8_t *dst, const uint8_t *src, size_t len)
 {
     for (size_t i = 0; i < len; ++i) {
         dst[i] ^= src[i];
@@ -78,6 +78,7 @@ static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
     }
 }
 
+/* doubling in GF(2^128), polynomial x^128 + x^7 + x^2 + x + 1 */
 static void gf_mul_x_n(uint8_t x[N])
 {
     uint8_t carry = (uint8_t)(x[0] >> 7);
@@ -92,7 +93,8 @@ static void gf_mul_x_n(uint8_t x[N])
     }
 }
 
-// one-leg forkskinny
+/* ----------------------------- one-leg ForkSkinny ----------------------------- */
+
 static void ztbc_encrypt(const uint8_t key[KEY_LEN],
                          uint8_t domain,
                          const uint8_t tweak_t[ZT_BYTES],
@@ -103,13 +105,14 @@ static void ztbc_encrypt(const uint8_t key[KEY_LEN],
     uint8_t dummy[N];
 
     memset(tk, 0, sizeof(tk));
-    tk[0] = domain;                    /* 0..9 */
+    tk[0] = domain;                    /* domain byte */
     memcpy(tk + 1, tweak_t, ZT_BYTES); /* remaining 120 tweak bits */
-    memcpy(tk + N, key, KEY_LEN);
+    memcpy(tk + N, key, KEY_LEN);      /* 16-byte key */
 
     forkskinny_128_256_encrypt(tk, out, dummy, in);
 }
 
+/* ----------------------------- ZHASH / ZMAC / ZFMac ----------------------------- */
 
 static int zhash(const uint8_t key[KEY_LEN],
                  const uint8_t *x, size_t xlen,
@@ -149,7 +152,7 @@ static int zhash(const uint8_t key[KEY_LEN],
             Sl[i] = (uint8_t)(Ll[i] ^ Xl[i]);
         }
 
-        /* Sr <- msb_t(Lr) XOR Xr   since t' <= n in this implementation */
+        /* Sr <- msb_t(Lr) XOR Xr */
         for (size_t i = 0; i < ZT_BYTES; ++i) {
             Sr[i] = (uint8_t)(Lr[i] ^ Xr[i]);
         }
@@ -163,11 +166,11 @@ static int zhash(const uint8_t key[KEY_LEN],
         }
 
         /* U <- 2(U XOR Cl) */
-        xor_block(U, Cl, N);
+        xor_into(U, Cl, N);
         gf_mul_x_n(U);
 
         /* V <- V XOR Cr */
-        xor_block(V, Cr, ZT_BYTES);
+        xor_into(V, Cr, ZT_BYTES);
 
         /* (Ll, Lr) <- (2Ll, 2Lr) */
         gf_mul_x_n(Ll);
@@ -235,13 +238,15 @@ static int zmac(const uint8_t key[KEY_LEN],
         zfin(key, 4, U, V, out);
     }
 
+    ct_memzero(U, sizeof(U));
+    ct_memzero(V, sizeof(V));
     return 0;
 }
 
-int zfmac(const uint8_t key[KEY_LEN],
-          const uint8_t *ad, size_t ad_len,
-          const uint8_t *msg, size_t msg_len,
-          uint8_t *tag, size_t tag_len)
+static int zfmac(const uint8_t key[KEY_LEN],
+                 const uint8_t *ad, size_t ad_len,
+                 const uint8_t *msg, size_t msg_len,
+                 uint8_t *tag, size_t tag_len)
 {
     uint8_t full[TWO_N];
     uint8_t *X;
@@ -259,12 +264,7 @@ int zfmac(const uint8_t key[KEY_LEN],
         return -1;
     }
 
-    /* ZFMac:
-     *   X <- Pad10(A) || Pad10(M)
-     *   X <- X || <|A|>_n || <|M|>_n
-     *   T <- ZMAC(K, X)
-     *   return [T]_lambda
-     */
+    /* X <- Pad10(A) || Pad10(M) || <|A|>_n || <|M|>_n */
     a_pad_len = pad10_len(ad_len, ZBLOCK_LEN);
     m_pad_len = pad10_len(msg_len, ZBLOCK_LEN);
     x_len = a_pad_len + m_pad_len + TWO_N;
@@ -284,20 +284,33 @@ int zfmac(const uint8_t key[KEY_LEN],
     rc = zmac(key, X, x_len, full);
     free(X);
     if (rc != 0) {
+        ct_memzero(full, sizeof(full));
         return -1;
     }
 
     memcpy(tag, full, tag_len);
+    ct_memzero(full, sizeof(full));
     return 0;
 }
 
-//public API
+/* ----------------------------- IV derivation for GCTR core ----------------------------- */
+
+/* gctr_crypt() expects a preformatted 32-byte IV = U || V_rep.
+ * In this adaptation, ZAFE exposes a 32-byte tag and uses it directly as IV.
+ */
+static void zafe_iv_from_tag(const uint8_t tag[ZAFE_TAG_LEN],
+                             uint8_t iv[TWO_N])
+{
+    memcpy(iv, tag, TWO_N);
+}
+
+/* ----------------------------- public API ----------------------------- */
 
 void forkskinny_zafe_keygen(const uint8_t key[ZAFE_KEY_LEN],
                             zafe_key_t *ks)
 {
-    memcpy(ks->enc_key, key, 16);
-    memcpy(ks->mac_key, key + 16, 16);
+    memcpy(ks->enc_key, key, ZAFE_ENC_KEY_LEN);
+    memcpy(ks->mac_key, key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
 }
 
 int forkskinny_zafe_auth(const zafe_key_t *ks,
@@ -332,7 +345,11 @@ void forkskinny_zafe_encrypt(const zafe_key_t *ks,
                              const uint8_t *msg, size_t mlen,
                              uint8_t *ct)
 {
-    gctr_crypt(ks->enc_key, tag, msg, mlen, ct);
+    uint8_t iv[TWO_N];
+
+    zafe_iv_from_tag(tag, iv);
+    gctr_crypt(ks->enc_key, iv, msg, mlen, ct);
+    ct_memzero(iv, sizeof(iv));
 }
 
 void forkskinny_zafe_decrypt(const zafe_key_t *ks,
@@ -340,7 +357,11 @@ void forkskinny_zafe_decrypt(const zafe_key_t *ks,
                              const uint8_t *ct, size_t clen,
                              uint8_t *msg)
 {
-    gctr_crypt(ks->enc_key, tag, ct, clen, msg);
+    uint8_t iv[TWO_N];
+
+    zafe_iv_from_tag(tag, iv);
+    gctr_crypt(ks->enc_key, iv, ct, clen, msg);
+    ct_memzero(iv, sizeof(iv));
 }
 
 int forkskinny_zafe_encrypt_auth(const zafe_key_t *ks,

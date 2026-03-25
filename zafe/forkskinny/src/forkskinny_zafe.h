@@ -7,11 +7,6 @@
 #define ZAFE_ENC_KEY_LEN 16
 #define ZAFE_MAC_KEY_LEN 16
 #define ZAFE_KEY_LEN     (ZAFE_ENC_KEY_LEN + ZAFE_MAC_KEY_LEN)
-
-/*
- * Current implementation uses the tag directly as the IV for FEnc,
- * so the public tag length must be at least 32 bytes.
- */
 #define ZAFE_TAG_LEN     32
 
 typedef struct {
@@ -54,4 +49,4 @@ int forkskinny_zafe_decrypt_verify(const zafe_key_t *ks,
                                    const uint8_t tag[ZAFE_TAG_LEN],
                                    uint8_t *msg);
 
-#endif /* FORKSKINNY_ZAFE_H */
+#endif
