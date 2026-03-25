@@ -179,12 +179,17 @@ static void bench_encrypt(void)
                                tag_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
-        forkskinny_zafe_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_zafe_encrypt(&ks, tag_local, pt_buf, MESSAGE_LEN, ct_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+
         start = timing_counter_get();
-        forkskinny_zafe_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
+        forkskinny_zafe_encrypt(&ks, tag_local, pt_buf, MESSAGE_LEN, ct_buf);
         end = timing_counter_get();
 
         {
@@ -214,12 +219,17 @@ static void bench_decrypt(void)
                                        ct_buf, tag_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
-        forkskinny_zafe_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_zafe_decrypt(&ks, tag_local, ct_buf, MESSAGE_LEN, dec_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; i++) {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+
         start = timing_counter_get();
-        forkskinny_zafe_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
+        forkskinny_zafe_decrypt(&ks, tag_local, ct_buf, MESSAGE_LEN, dec_buf);
         end = timing_counter_get();
 
         {
@@ -278,6 +288,9 @@ static void bench_verify(void)
 /* ── top-level entry ───────────────────────────────────── */
 void bench_zafe_all(void)
 {
+    timing_init();
+    timing_start();
+
     printk("[FORKSKINNY ZAFE] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
@@ -289,6 +302,8 @@ void bench_zafe_all(void)
     bench_encrypt();
     bench_decrypt();
     bench_verify();
+
+    timing_stop();
 
     printk("--- Benchmark complete ---\n\n");
 }
