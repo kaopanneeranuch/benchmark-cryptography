@@ -3,16 +3,23 @@
 #include <zephyr/timing/timing.h>
 #include "bench.h"
 
+// int main(void)
+// {
+//     timing_init();
+//     timing_start();
+
+//     printk("\n=== ForkSkinny-ZAFE AEAD Benchmark ===\n\n");
+
+//     verify_correctness();
+//     bench_zafe_all();
+
+//     timing_stop();
+//     return 0;
+// }
+
 int main(void)
 {
-    timing_init();
-    timing_start();
-
     printk("\n=== ForkSkinny-ZAFE AEAD Benchmark ===\n\n");
-
-    verify_correctness();
     bench_zafe_all();
-
-    timing_stop();
     return 0;
 }
