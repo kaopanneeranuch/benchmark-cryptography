@@ -7,7 +7,8 @@
 #include <string.h>
 
 #include "include/sonics_ref.h"
-#include "include/supersonic_star.h"
+#include "include/supersonic_fs_star.h"
+#include "include/supersonic_bk_star.h"
 
 #define WARMUP_ITERS 10
 #define BENCH_ITERS  100
@@ -74,8 +75,10 @@ static void bench_supersonic_star_variant(const char *name, supersonic_fn_t fn, 
 static void bench_size(uint32_t mlen)
 {
     printk("\n[Message size: %u bytes]\n", mlen);
-    bench_supersonic_star_variant("supersonic_256_forkskinny", supersonic_256_star, mlen);
-    bench_supersonic_star_variant("supersonic_384_forkskinny", supersonic_384_star, mlen);
+    // bench_supersonic_star_variant("supersonic_256_forkskinny", supersonic_256_star, mlen);
+    // bench_supersonic_star_variant("supersonic_384_forkskinny", supersonic_384_star, mlen);
+    bench_supersonic_star_variant("supersonic_256_bk_exact", supersonic_256_butterknife_deoxys_exact, mlen);
+    bench_supersonic_star_variant("supersonic_256_bk_star", supersonic_256_butterknife_star, mlen);
 }
 
 int main(void)
@@ -83,7 +86,7 @@ int main(void)
     timing_init();
     timing_start();
 
-    printk("\n=== Supersonic/GCTR3 Benchmark ===\n");
+    printk("\n=== Supersonic Star Benchmark ===\n");
     printk("iters=%d, warmup=%d\n", BENCH_ITERS, WARMUP_ITERS);
     printk("format: <variant> <size> : <avg cycles> | <avg ns>\n");
 

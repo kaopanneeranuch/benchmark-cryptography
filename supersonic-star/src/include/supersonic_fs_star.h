@@ -1,5 +1,5 @@
-#ifndef SUPERSONIC_STAR_H
-#define SUPERSONIC_STAR_H
+#ifndef SUPERSONIC_FS_STAR_H
+#define SUPERSONIC_FS_STAR_H
 
 #include <stdint.h>
 

@@ -198,8 +198,8 @@ static void bench_size(uint32_t mlen)
 {
     printk("\n[Message size: %u bytes]\n", mlen);
     bench_supersonic_variant("supersonic_256_butterknife", supersonic_256_butterknife, mlen);
-    bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
-    bench_gctr_variants(mlen);
+    // bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
+    // bench_gctr_variants(mlen);
 }
 
 int main(void)

@@ -1,9 +1,11 @@
 #include <stdint.h>
+#include <stdint.h>
 #include <string.h>
-#include "../include/butterknife.h"
-#include "../include/sonics_ref.h"
-#include "../forkskinny-opt32/internal-forkskinny.h"
-#include "../forkskinny-opt32/skinny.h"
+#include <stdbool.h>
+#include "butterknife.h"
+#include "include/sonics_ref.h"
+#include "internal-forkskinny.h"
+#include "skinny.h"
 
 /*
  * supersonic_star:
@@ -12,6 +14,7 @@
  *   - 384 stays pure ForkSkinny because skinny.h here has no 128-384 API
  *
  */
+
 #define SUPERSONIC_STAR_256_ROUNDS 32u
 #define SUPERSONIC_STAR_192_ROUNDS 28u
 
@@ -57,7 +60,7 @@ static void skinny_128_256_oneleg_star(uint8_t out[16],
                                        const uint8_t key_part[16],
                                        const uint8_t tweak_part[16])
 {
-    skinny_128_256_tweakey_schedule_t tks1, tks2;
+    static skinny_128_256_tweakey_schedule_t tks1, tks2;
     skinny_128_256_state_t state;
     uint8_t tk[32];
 
@@ -84,7 +87,7 @@ static void skinny_64_192_oneleg_star(uint8_t out[8],
                                       const uint8_t key_part[16],
                                       const uint8_t tweak_part[8])
 {
-    skinny_64_192_tweakey_schedule_t tks1, tks2;
+    static skinny_64_192_tweakey_schedule_t tks1, tks2;
     skinny_64_192_state_t state;
 
     skinny_64_192_init_keypart(&tks1, key_part, SUPERSONIC_STAR_192_ROUNDS);
@@ -212,7 +215,7 @@ void supersonic_384_star(const uint8_t key[16],
     uint16_t i, numP;
     uint8_t K_prime[SONICS_384_K_SIZE], mask[SONICS_384_N_SIZE];
     uint8_t buffer[SONICS_384_K_SIZE + SONICS_384_T_SIZE + 1];
-    forkskinny_128_384_tweakey_schedule_t tks1, tks2, tks3;
+    static forkskinny_128_384_tweakey_schedule_t tks1, tks2, tks3;
     SonicChains Chains;
     Sonics_384_struct_t Sonic;
 
@@ -289,7 +292,7 @@ void supersonic_256_star(const uint8_t key[16],
     uint8_t res;
     uint16_t i, numP;
     uint8_t K_prime[SONICS_256_K_SIZE], mask[SONICS_256_N_SIZE], buffer[SONICS_256_N_SIZE];
-    forkskinny_128_256_tweakey_schedule_t tks1, tks2;
+    static forkskinny_128_256_tweakey_schedule_t tks1, tks2;
     SonicChains Chains;
     Sonics_256_struct_t Sonic;
 
@@ -358,7 +361,7 @@ void supersonic_192_star(const uint8_t key[16],
     uint8_t res;
     uint16_t i, numP;
     uint8_t K_prime[SONICS_192_K_SIZE], mask[SONICS_192_N_SIZE], buffer[SONICS_192_N_SIZE];
-    forkskinny_64_192_tweakey_schedule_t tks1, tks2;
+    static forkskinny_64_192_tweakey_schedule_t tks1, tks2;
     SonicChains Chains;
     Sonics_192_struct_t Sonic;
 
