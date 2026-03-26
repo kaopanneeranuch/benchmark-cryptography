@@ -5,15 +5,16 @@ project(supersonic)
 
 zephyr_include_directories(
     ../BC__Butterknife/include
-    src/forkskinny-opt32
+    ../forkskinny-opt32
     src
 )
 
 target_sources(app PRIVATE 
     src/main.c
-    src/supersonic_butterknife.c
-    src/supersonic_forkskinny.c
+    src/supersonic-star_butterknife.c
+    src/supersonic-star_forkskinny.c
     ../BC__Butterknife/source/butterknife256_tks.c
     ../BC__Butterknife/source/butterknife256.c
-    src/forkskinny-opt32/internal-forkskinny.c
+    ../forkskinny-opt32/internal-forkskinny.c
+    ../forkskinny-opt32/skinny.c
 )

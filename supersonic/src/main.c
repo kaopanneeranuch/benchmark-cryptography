@@ -11,6 +11,7 @@
 #include "gctr-3-prime.h"
 #include "gctr-3-prime-bk.h"
 #include "include/sonics_ref.h"
+#include "include/supersonic.h"
 
 #define WARMUP_ITERS 10
 #define BENCH_ITERS  100
@@ -196,8 +197,8 @@ static void bench_gctr_variants(uint32_t mlen)
 static void bench_size(uint32_t mlen)
 {
     printk("\n[Message size: %u bytes]\n", mlen);
-//     bench_supersonic_variant("supersonic_256_butterknife", supersonic_256_butterknife, mlen);
-//     bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
+    bench_supersonic_variant("supersonic_256_butterknife", supersonic_256_butterknife, mlen);
+    bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
     bench_gctr_variants(mlen);
 }
 

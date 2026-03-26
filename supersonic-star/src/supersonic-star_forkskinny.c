@@ -11,7 +11,6 @@
  *   - precompute and final tag generation stay ForkSkinny
  *   - 384 stays pure ForkSkinny because skinny.h here has no 128-384 API
  *
- * Tune these experimentally.
  */
 #define SUPERSONIC_STAR_256_ROUNDS 32u
 #define SUPERSONIC_STAR_192_ROUNDS 28u

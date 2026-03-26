@@ -4,6 +4,7 @@
 #include "butterknife.h"
 #include "sonics_ref.h"
 #include "internal-forkskinny.h"
+#include "include/supersonic.h"
 
 static void arrXOR(uint8_t *out, const uint8_t *right, uint16_t len){
     for(uint8_t i = 0; i<len; ++i){
