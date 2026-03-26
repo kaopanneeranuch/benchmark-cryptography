@@ -3,7 +3,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(forkskinny)
 
-target_include_directories(app PRIVATE ../../ ../../ForkAE ../../GCTR-3/forkskinny)
+target_include_directories(app PRIVATE ../../forkskinny-opt32 ../../ ../../GCTR-3/forkskinny)
 
 target_sources(app PRIVATE
 	src/main.c
@@ -11,6 +11,5 @@ target_sources(app PRIVATE
 	src/forkskinny_sonicae.c
 	src/forkskinny_supersonic.c
 	../../GCTR-3/forkskinny/gctr-3-prime.c
-	../../ForkAE/internal-forkskinny.c
-	../../ForkAE/forkae.c
+	../../forkskinny-opt32/internal-forkskinny.c
 )

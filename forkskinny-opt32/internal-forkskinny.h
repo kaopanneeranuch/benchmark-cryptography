@@ -41,27 +41,73 @@ extern "C" {
 #endif
 
 /**
+ * \brief Number of rounds of ForkSkinny-128-256 before forking.
+ */
+#define FORKSKINNY_128_256_ROUNDS_BEFORE 21
+
+/**
+ * \brief Number of rounds of ForkSkinny-128-256 after forking.
+ */
+#define FORKSKINNY_128_256_ROUNDS_AFTER 27
+
+/**
  * \brief State information for ForkSkinny-128-256.
  */
 typedef struct
 {
-    uint32_t TK1[4];        /**< First part of the tweakey */
-    uint32_t TK2[4];        /**< Second part of the tweakey */
+    // uint32_t TK1[4];        /**< First part of the tweakey */
+    // uint32_t TK2[4];        /**< Second part of the tweakey */
     uint32_t S[4];          /**< Current block state */
 
 } forkskinny_128_256_state_t;
+
+typedef struct
+{
+    /** Words of the full key schedule */
+    uint32_t row0[(FORKSKINNY_128_256_ROUNDS_BEFORE + 2*FORKSKINNY_128_256_ROUNDS_AFTER)];
+    uint32_t row1[(FORKSKINNY_128_256_ROUNDS_BEFORE + 2*FORKSKINNY_128_256_ROUNDS_AFTER)];
+
+} forkskinny_128_256_tweakey_schedule_t;
+
+/**
+ * \brief Number of rounds of ForkSkinny-128-384 before forking.
+ */
+#define FORKSKINNY_128_384_ROUNDS_BEFORE 25
+
+/**
+ * \brief Number of rounds of ForkSkinny-128-384 after forking.
+ */
+#define FORKSKINNY_128_384_ROUNDS_AFTER 31
 
 /**
  * \brief State information for ForkSkinny-128-384.
  */
 typedef struct
 {
-    uint32_t TK1[4];        /**< First part of the tweakey */
-    uint32_t TK2[4];        /**< Second part of the tweakey */
-    uint32_t TK3[4];        /**< Third part of the tweakey */
+    // uint32_t TK1[4];        /**< First part of the tweakey */
+    // uint32_t TK2[4];        /**< Second part of the tweakey */
+    // uint32_t TK3[4];        /**< Third part of the tweakey */
     uint32_t S[4];          /**< Current block state */
 
 } forkskinny_128_384_state_t;
+
+typedef struct
+{
+    /** Words of the full key schedule */
+    uint32_t row0[(FORKSKINNY_128_384_ROUNDS_BEFORE + 2*FORKSKINNY_128_384_ROUNDS_AFTER)];
+    uint32_t row1[(FORKSKINNY_128_384_ROUNDS_BEFORE + 2*FORKSKINNY_128_384_ROUNDS_AFTER)];
+
+} forkskinny_128_384_tweakey_schedule_t;
+
+/**
+ * \brief Number of rounds of ForkSkinny-64-192 before forking.
+ */
+#define FORKSKINNY_64_192_ROUNDS_BEFORE 17
+
+/**
+ * \brief Number of rounds of ForkSkinny-64-192 after forking.
+ */
+#define FORKSKINNY_64_192_ROUNDS_AFTER 23
 
 /**
  * \brief State information for ForkSkinny-64-192.
@@ -75,6 +121,21 @@ typedef struct
 
 } forkskinny_64_192_state_t;
 
+typedef struct
+{
+    /** Words of the full key schedule */
+    uint16_t row0[(FORKSKINNY_64_192_ROUNDS_BEFORE + 2*FORKSKINNY_64_192_ROUNDS_AFTER)];
+    uint16_t row1[(FORKSKINNY_64_192_ROUNDS_BEFORE + 2*FORKSKINNY_64_192_ROUNDS_AFTER)];
+
+
+} forkskinny_64_192_tweakey_schedule_t;
+
+
+void forkskinny_128_256_init_tks(forkskinny_128_256_tweakey_schedule_t *tks, const unsigned char key[32], uint8_t nb_rounds);
+
+void forkskinny_128_256_init_tks_part(forkskinny_128_256_tweakey_schedule_t *tks, const unsigned char key[16], uint8_t nb_rounds, int tki);
+
+
 /**
  * \brief Applies several rounds of ForkSkinny-128-256.
  *
@@ -83,7 +144,7 @@ typedef struct
  * \param last Last round to apply plus 1.
  */
 void forkskinny_128_256_rounds
-    (forkskinny_128_256_state_t *state, unsigned first, unsigned last);
+    (forkskinny_128_256_state_t *state, const forkskinny_128_256_tweakey_schedule_t *tks1, const forkskinny_128_256_tweakey_schedule_t *tks2, unsigned first, unsigned last);
 
 /**
  * \brief Applies several rounds of ForkSkinny-128-256 in reverse.
@@ -93,25 +154,12 @@ void forkskinny_128_256_rounds
  * \param last Last round to apply.
  */
 void forkskinny_128_256_inv_rounds
-    (forkskinny_128_256_state_t *state, unsigned first, unsigned last);
+    (forkskinny_128_256_state_t *state, const forkskinny_128_256_tweakey_schedule_t *tks1, const forkskinny_128_256_tweakey_schedule_t *tks2, unsigned first, unsigned last);
 
-/**
- * \brief Forwards the tweakey for ForkSkinny-128-256.
- *
- * \param state Points to the ForkSkinny-128-256 state.
- * \param rounds Number of rounds to forward by.
- */
-void forkskinny_128_256_forward_tk
-    (forkskinny_128_256_state_t *state, unsigned rounds);
 
-/**
- * \brief Reverses the tweakey for ForkSkinny-128-256.
- *
- * \param state Points to the ForkSkinny-128-256 state.
- * \param rounds Number of rounds to reverse by.
- */
-void forkskinny_128_256_reverse_tk
-    (forkskinny_128_256_state_t *state, unsigned rounds);
+void forkskinny_128_384_init_tks(forkskinny_128_384_tweakey_schedule_t *tks, const unsigned char key[48], uint8_t nb_rounds);
+void forkskinny_128_384_init_tks_part(forkskinny_128_384_tweakey_schedule_t *tks, const unsigned char key[16], uint8_t nb_rounds, int partindex);
+
 
 /**
  * \brief Applies several rounds of ForkSkinny-128-384.
@@ -121,7 +169,7 @@ void forkskinny_128_256_reverse_tk
  * \param last Last round to apply plus 1.
  */
 void forkskinny_128_384_rounds
-    (forkskinny_128_384_state_t *state, unsigned first, unsigned last);
+    (forkskinny_128_384_state_t *state, const forkskinny_128_384_tweakey_schedule_t *tks1, const forkskinny_128_384_tweakey_schedule_t *tks2, const forkskinny_128_384_tweakey_schedule_t *tks3, unsigned first, unsigned last);
 
 /**
  * \brief Applies several rounds of ForkSkinny-128-384 in reverse.
@@ -131,25 +179,12 @@ void forkskinny_128_384_rounds
  * \param last Last round to apply.
  */
 void forkskinny_128_384_inv_rounds
-    (forkskinny_128_384_state_t *state, unsigned first, unsigned last);
+    (forkskinny_128_384_state_t *state, const forkskinny_128_384_tweakey_schedule_t *tks1, const forkskinny_128_384_tweakey_schedule_t *tks2, const forkskinny_128_384_tweakey_schedule_t *tks3, unsigned first, unsigned last);
 
-/**
- * \brief Forwards the tweakey for ForkSkinny-128-384.
- *
- * \param state Points to the ForkSkinny-128-384 state.
- * \param rounds Number of rounds to forward by.
- */
-void forkskinny_128_384_forward_tk
-    (forkskinny_128_384_state_t *state, unsigned rounds);
 
-/**
- * \brief Reverses the tweakey for ForkSkinny-128-384.
- *
- * \param state Points to the ForkSkinny-128-384 state.
- * \param rounds Number of rounds to reverse by.
- */
-void forkskinny_128_384_reverse_tk
-    (forkskinny_128_384_state_t *state, unsigned rounds);
+void forkskinny_64_192_init_tks_keypart(forkskinny_64_192_tweakey_schedule_t *tks, const unsigned char key[16], uint8_t nb_rounds);
+void forkskinny_64_192_init_tks_tweakpart(forkskinny_64_192_tweakey_schedule_t *tks, const unsigned char key[8], uint8_t nb_rounds);
+
 
 /**
  * \brief Applies several rounds of ForkSkinny-64-192.
@@ -162,7 +197,8 @@ void forkskinny_128_384_reverse_tk
  * so it is simplest to manage the rows in big-endian byte order.
  */
 void forkskinny_64_192_rounds
-    (forkskinny_64_192_state_t *state, unsigned first, unsigned last);
+    (forkskinny_64_192_state_t *state, const forkskinny_64_192_tweakey_schedule_t *tks1,
+      const forkskinny_64_192_tweakey_schedule_t *tks2, unsigned first, unsigned last);
 
 /**
  * \brief Applies several rounds of ForkSkinny-64-192 in reverse.
@@ -172,25 +208,9 @@ void forkskinny_64_192_rounds
  * \param last Last round to apply.
  */
 void forkskinny_64_192_inv_rounds
-    (forkskinny_64_192_state_t *state, unsigned first, unsigned last);
+    (forkskinny_64_192_state_t *state, const forkskinny_64_192_tweakey_schedule_t *tks1,
+      const forkskinny_64_192_tweakey_schedule_t *tks2, unsigned first, unsigned last);
 
-/**
- * \brief Forwards the tweakey for ForkSkinny-64-192.
- *
- * \param state Points to the ForkSkinny-64-192 state.
- * \param rounds Number of rounds to forward by.
- */
-void forkskinny_64_192_forward_tk
-    (forkskinny_64_192_state_t *state, unsigned rounds);
-
-/**
- * \brief Reverses the tweakey for ForkSkinny-64-192.
- *
- * \param state Points to the ForkSkinny-64-192 state.
- * \param rounds Number of rounds to reverse by.
- */
-void forkskinny_64_192_reverse_tk
-    (forkskinny_64_192_state_t *state, unsigned rounds);
 
 /**
  * \brief Encrypts a block of plaintext with ForkSkinny-128-256.
@@ -208,6 +228,12 @@ void forkskinny_128_256_encrypt
     (const unsigned char key[32], unsigned char *output_left,
      unsigned char *output_right, const unsigned char *input);
 
+ void forkskinny_128_256_encrypt_with_tks
+       (const forkskinny_128_256_tweakey_schedule_t *tks1,
+         const forkskinny_128_256_tweakey_schedule_t *tks2,
+         unsigned char *output_left, unsigned char *output_right,
+         const unsigned char *input);
+
 /**
  * \brief Decrypts a block of ciphertext with ForkSkinny-128-256.
  *
@@ -221,6 +247,12 @@ void forkskinny_128_256_encrypt
 void forkskinny_128_256_decrypt
     (const unsigned char key[32], unsigned char *output_left,
      unsigned char *output_right, const unsigned char *input);
+
+void forkskinny_128_256_decrypt_with_tks
+    (const forkskinny_128_256_tweakey_schedule_t *tks1,
+      const forkskinny_128_256_tweakey_schedule_t *tks2,
+      unsigned char *output_left, unsigned char *output_right,
+      const unsigned char *input);
 
 /**
  * \brief Encrypts a block of plaintext with ForkSkinny-128-384.
@@ -238,6 +270,10 @@ void forkskinny_128_384_encrypt
     (const unsigned char key[48], unsigned char *output_left,
      unsigned char *output_right, const unsigned char *input);
 
+void forkskinny_128_384_encrypt_with_tks
+   (const forkskinny_128_384_tweakey_schedule_t *tks1, const forkskinny_128_384_tweakey_schedule_t *tks2,
+     const forkskinny_128_384_tweakey_schedule_t *tks3, unsigned char *output_left,
+    unsigned char *output_right, const unsigned char *input);
 /**
  * \brief Decrypts a block of ciphertext with ForkSkinny-128-384.
  *
@@ -251,6 +287,11 @@ void forkskinny_128_384_encrypt
 void forkskinny_128_384_decrypt
     (const unsigned char key[48], unsigned char *output_left,
      unsigned char *output_right, const unsigned char *input);
+
+void forkskinny_128_384_decrypt_with_tks
+    (const forkskinny_128_384_tweakey_schedule_t *tks1, const forkskinny_128_384_tweakey_schedule_t *tks2,
+      const forkskinny_128_384_tweakey_schedule_t *tks3, unsigned char *output_left,
+      unsigned char *output_right, const unsigned char *input);
 
 /**
  * \brief Encrypts a block of input with ForkSkinny-64-192.
@@ -273,6 +314,9 @@ void forkskinny_128_384_decrypt
 void forkskinny_64_192_encrypt
     (const unsigned char key[24], unsigned char *output_left,
      unsigned char *output_right, const unsigned char *input);
+void forkskinny_64_192_encrypt_with_tks
+  (const forkskinny_64_192_tweakey_schedule_t *tks1, const forkskinny_64_192_tweakey_schedule_t *tks2,
+    unsigned char *output_left, unsigned char *output_right, const unsigned char *input);
 
 /**
  * \brief Decrypts a block of ciphertext with ForkSkinny-64-192.
@@ -287,6 +331,10 @@ void forkskinny_64_192_encrypt
 void forkskinny_64_192_decrypt
     (const unsigned char key[24], unsigned char *output_left,
      unsigned char *output_right, const unsigned char *input);
+
+void forkskinny_64_192_decrypt_with_tks
+  (const forkskinny_64_192_tweakey_schedule_t *tks1, const forkskinny_64_192_tweakey_schedule_t *tks2,
+    unsigned char *output_left, unsigned char *output_right, const unsigned char *input);
 
 #ifdef __cplusplus
 }

@@ -1,6 +1,6 @@
 #include "forkskinny_gcm.h"
 #include "ghash.h"
-#include "ForkAE/internal-forkskinny.h"
+#include "internal-forkskinny.h"
 #include <string.h>
 
 static void inc_be32(uint8_t ctr[16]) { for (int i = 15; i >= 12; i--) if (++ctr[i]) break; }

@@ -3,7 +3,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(forkskinny)
 
-target_include_directories(app PRIVATE ../../)
+target_include_directories(app PRIVATE ../../forkskinny-opt32 ../../)
 
 target_sources(app PRIVATE
 	src/main.c
@@ -12,6 +12,5 @@ target_sources(app PRIVATE
 	src/gf.c
 	src/utils.c
 	src/bench.c
-	../../ForkAE/internal-forkskinny.c
-	../../ForkAE/forkae.c
+	../../forkskinny-opt32/internal-forkskinny.c
 )
