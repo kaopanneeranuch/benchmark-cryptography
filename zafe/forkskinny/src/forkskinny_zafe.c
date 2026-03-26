@@ -1,6 +1,6 @@
 #include "forkskinny_zafe.h"
 #include "internal-forkskinny.h"
-#include "gctr-3.h"
+#include "fenc.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -295,7 +295,7 @@ static int zfmac(const uint8_t key[KEY_LEN],
 
 /* ----------------------------- IV derivation for GCTR core ----------------------------- */
 
-/* gctr_crypt() expects a preformatted 32-byte IV = U || V_rep.
+/* fenc() expects a preformatted 32-byte IV = U || V_rep.
  * In this adaptation, ZAFE exposes a 32-byte tag and uses it directly as IV.
  */
 static void zafe_iv_from_tag(const uint8_t tag[ZAFE_TAG_LEN],
@@ -348,7 +348,7 @@ void forkskinny_zafe_encrypt(const zafe_key_t *ks,
     uint8_t iv[TWO_N];
 
     zafe_iv_from_tag(tag, iv);
-    gctr_crypt(ks->enc_key, iv, msg, mlen, ct);
+    fenc(ks->enc_key, iv, msg, mlen, ct);
     ct_memzero(iv, sizeof(iv));
 }
 
@@ -360,7 +360,7 @@ void forkskinny_zafe_decrypt(const zafe_key_t *ks,
     uint8_t iv[TWO_N];
 
     zafe_iv_from_tag(tag, iv);
-    gctr_crypt(ks->enc_key, iv, ct, clen, msg);
+    fenc(ks->enc_key, iv, ct, clen, msg);
     ct_memzero(iv, sizeof(iv));
 }
 

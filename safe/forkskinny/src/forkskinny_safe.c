@@ -1,6 +1,6 @@
 #include "forkskinny_safe.h"
 #include "internal-forkskinny.h"
-#include "gctr-3.h"
+#include "fenc.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -174,7 +174,7 @@ static void tprf_eval_32(const uint8_t key[KEY_LEN],
     forkskinny_128_256_encrypt(tk, out, out + 16, U);
 }
 
-/* Convert raw SAFE tag to preformatted IV = U || V_rep for gctr_crypt(). */
+/* Convert raw SAFE tag to preformatted IV = U || V_rep */
 static void safe_iv_from_tag(const uint8_t tag[SAFE_TAG_LEN],
                              uint8_t iv[SAFE_IV_LEN])
 {
@@ -312,7 +312,7 @@ void forkskinny_safe_encrypt(const safe_key_t *ks,
     uint8_t iv[SAFE_IV_LEN];
 
     safe_iv_from_tag(tag, iv);
-    gctr_crypt(ks->key, iv, pt, ptlen, ct);
+    fenc(ks->key, iv, pt, ptlen, ct);
     ct_memzero(iv, sizeof(iv));
 }
 
@@ -324,7 +324,7 @@ void forkskinny_safe_decrypt(const safe_key_t *ks,
     uint8_t iv[SAFE_IV_LEN];
 
     safe_iv_from_tag(tag, iv);
-    gctr_crypt(ks->key, iv, ct, ctlen, pt);
+    fenc(ks->key, iv, ct, ctlen, pt);
     ct_memzero(iv, sizeof(iv));
 }
 
