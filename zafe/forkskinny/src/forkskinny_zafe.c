@@ -93,7 +93,7 @@ static void gf_mul_x_n(uint8_t x[N])
     }
 }
 
-/* ----------------------------- one-leg ForkSkinny ----------------------------- */
+/* ----------------------------- ForkSkinny helper ----------------------------- */
 
 static void ztbc_encrypt(const uint8_t key[KEY_LEN],
                          uint8_t domain,
@@ -102,14 +102,19 @@ static void ztbc_encrypt(const uint8_t key[KEY_LEN],
                          uint8_t out[N])
 {
     uint8_t tk[TWO_N];
-    uint8_t dummy[N];
 
     memset(tk, 0, sizeof(tk));
     tk[0] = domain;                    /* domain byte */
     memcpy(tk + 1, tweak_t, ZT_BYTES); /* remaining 120 tweak bits */
     memcpy(tk + N, key, KEY_LEN);      /* 16-byte key */
 
-    forkskinny_128_256_encrypt(tk, out, dummy, in);
+    /*
+     * ZHASH/ZFIN use a single n-bit TBC output per call.  Request only the
+     * needed ForkSkinny branch so the implementation matches the paper's
+     * single-leg E_K^i(T, M) abstraction instead of computing and discarding
+     * the second branch.
+     */
+    forkskinny_128_256_encrypt(tk, out, NULL, in);
 }
 
 /* ----------------------------- ZHASH / ZMAC / ZFMac ----------------------------- */
