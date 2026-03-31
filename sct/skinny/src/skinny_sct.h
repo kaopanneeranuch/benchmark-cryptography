@@ -33,9 +33,6 @@ void skinny_encrypt(const uint8_t *key,
                     const uint8_t in[16],
                     uint8_t out[16]);
 
-void skinny_sct_keygen(const uint8_t key[SCT_KEY_LEN],
-                       sct_key_t *ks);
-
 
 void skinny_sct_ctrt(const sct_key_t *ks,
                      const uint8_t nonce[SCT_NONCE_LEN],

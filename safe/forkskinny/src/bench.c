@@ -63,7 +63,8 @@ void verify_correctness(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
 
-    forkskinny_safe_keygen(bench_key, &ks);
+    /* initialize key schedule */
+    memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
     /* SAFE.Enc = tag first, then FEnc */
     rc = forkskinny_safe_encrypt_auth(&ks,
@@ -103,30 +104,6 @@ void verify_correctness(void)
 
 /* ── individual benchmarks ─────────────────────────────── */
 
-static void bench_keygen(void)
-{
-    timing_t start, end;
-    uint64_t total_c = 0, total_ns = 0;
-
-    for (int i = 0; i < WARMUP_ITERS; i++) {
-        forkskinny_safe_keygen(bench_key, &ks);
-    }
-
-    for (int i = 0; i < BENCH_ITERS; i++) {
-        start = timing_counter_get();
-        forkskinny_safe_keygen(bench_key, &ks);
-        end = timing_counter_get();
-
-        uint64_t c = timing_cycles_get(&start, &end);
-        total_c  += c;
-        total_ns += timing_cycles_to_ns(c);
-    }
-
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "keygen",
-           (unsigned long long)(total_c / BENCH_ITERS),
-           (unsigned long long)(total_ns / BENCH_ITERS));
-}
-
 static void bench_hash(void)
 {
     timing_t start, end;
@@ -134,7 +111,7 @@ static void bench_hash(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
-    forkskinny_safe_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         (void)forkskinny_safe_auth(&ks,
@@ -169,7 +146,7 @@ static void bench_encrypt(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
-    forkskinny_safe_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
     /* precompute tag once so this bench measures only FEnc */
     (void)forkskinny_safe_auth(&ks,
@@ -209,7 +186,7 @@ static void bench_decrypt(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
-    forkskinny_safe_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
     (void)forkskinny_safe_auth(&ks,
                                ad_buf, AD_LEN,
@@ -253,7 +230,7 @@ static void bench_verify(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
-    forkskinny_safe_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
     (void)forkskinny_safe_auth(&ks,
                                ad_buf, AD_LEN,
@@ -294,7 +271,6 @@ void bench_safe_all(void)
 
     verify_correctness();
 
-    bench_keygen();
     bench_hash();
     bench_encrypt();
     bench_decrypt();

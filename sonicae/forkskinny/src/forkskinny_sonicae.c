@@ -6,11 +6,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-void forkskinny_sonicae_keygen(const uint8_t key[SONICAE_KEY_LEN],
-                               sonicae_key_t *ks)
-{
-    memcpy(ks->key, key, SONICAE_KEY_LEN);
-}
+/* keygen removed: callers should initialize `sonicae_key_t` directly (memcpy) */
 
 void forkskinny_sonicae_auth(const sonicae_key_t *ks,
                              const uint8_t *ad, size_t adlen,

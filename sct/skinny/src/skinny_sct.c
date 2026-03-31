@@ -83,10 +83,9 @@ void skinny_sct_ctrt(const sct_key_t *ks,
     }
 }
 
-void skinny_sct_keygen(const uint8_t key[SCT_KEY_LEN], sct_key_t *ks)
-{
-    memcpy(ks->key, key, SCT_KEY_LEN);
-}
+/* keygen removed -- callers should initialize the key structure directly, e.g.
+ * memcpy(ks.key, bench_key, SCT_KEY_LEN);
+ */
 
 /*
  * EPWC:

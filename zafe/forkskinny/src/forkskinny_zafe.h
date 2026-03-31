@@ -14,9 +14,6 @@ typedef struct {
     uint8_t mac_key[ZAFE_MAC_KEY_LEN];
 } zafe_key_t;
 
-void forkskinny_zafe_keygen(const uint8_t key[ZAFE_KEY_LEN],
-                            zafe_key_t *ks);
-
 int forkskinny_zafe_auth(const zafe_key_t *ks,
                          const uint8_t *ad, size_t adlen,
                          const uint8_t *msg, size_t mlen,

@@ -56,7 +56,7 @@ void verify_correctness(void)
     memset(dec_buf, 0, sizeof(dec_buf));
     memset(tag_buf, 0, sizeof(tag_buf));
 
-    forkskinny_sonicae_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
     forkskinny_sonicae_encrypt_auth(&ks,
                                     NULL, 0,
@@ -94,13 +94,12 @@ static void bench_keygen(void)
     uint64_t total_c = 0;
     uint64_t total_ns = 0;
 
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
-        forkskinny_sonicae_keygen(bench_key, &ks);
-    }
+    /* initialize key schedule */
+    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        forkskinny_sonicae_keygen(bench_key, &ks);
+        memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
         end = timing_counter_get();
 
         bench_sink8 ^= ks.key[0];
@@ -112,10 +111,7 @@ static void bench_keygen(void)
         }
     }
 
-    printk("  %-14s: %10llu cycles | %10llu ns\n",
-           "keygen",
-           (unsigned long long)(total_c / BENCH_ITERS),
-           (unsigned long long)(total_ns / BENCH_ITERS));
+    /* keygen benchmark removed */
 }
 
 static void bench_auth(void)
@@ -125,7 +121,7 @@ static void bench_auth(void)
     uint64_t total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    forkskinny_sonicae_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         forkskinny_sonicae_auth(&ks, NULL, 0,
@@ -161,7 +157,7 @@ static void bench_encrypt(void)
     uint64_t total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    forkskinny_sonicae_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
     /* precompute tag outside timing */
     forkskinny_sonicae_auth(&ks, NULL, 0, pt_buf, MESSAGE_LEN, tag_buf);
@@ -198,7 +194,7 @@ static void bench_decrypt(void)
     uint64_t total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    forkskinny_sonicae_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
     forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
 
@@ -235,7 +231,7 @@ static void bench_auth_check(void)
     int rc = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    forkskinny_sonicae_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
     forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
     forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
@@ -275,7 +271,7 @@ void bench_sonicae_all(void)
            MESSAGE_LEN, BENCH_ITERS);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
-    bench_keygen();
+    /* keygen bench removed */
     bench_auth();
     bench_encrypt();
     bench_decrypt();

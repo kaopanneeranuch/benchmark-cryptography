@@ -272,10 +272,9 @@ int sfmac(const uint8_t key[KEY_LEN],
 /* public API                                                                */
 /* ------------------------------------------------------------------------- */
 
-void forkskinny_safe_keygen(const uint8_t key[SAFE_KEY_LEN], safe_key_t *ks)
-{
-    memcpy(ks->key, key, SAFE_KEY_LEN);
-}
+/* keygen removed: callers should initialize `safe_key_t` directly (e.g. memcpy)
+   Previously this function simply copied the key into the structure.
+*/
 
 int forkskinny_safe_auth(const safe_key_t *ks,
                          const uint8_t *ad, size_t adlen,

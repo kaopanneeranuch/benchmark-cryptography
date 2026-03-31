@@ -13,8 +13,7 @@ typedef struct {
 } sonicae_key_t;
 
 /* Key setup */
-void forkskinny_sonicae_keygen(const uint8_t key[SONICAE_KEY_LEN],
-                               sonicae_key_t *ks);
+/* keygen removed: callers should populate `sonicae_key_t` directly */
 
 /* Authentication only: compute 32-byte SuperSonic tag */
 void forkskinny_sonicae_auth(const sonicae_key_t *ks,

@@ -11,8 +11,7 @@ typedef struct {
     uint8_t key[SAFE_KEY_LEN];
 } safe_key_t;
 
-void forkskinny_safe_keygen(const uint8_t key[SAFE_KEY_LEN],
-                            safe_key_t *ks);
+/* keygen removed: callers should populate `safe_key_t` directly */
 
 int forkskinny_safe_auth(const safe_key_t *ks,
                          const uint8_t *ad, size_t adlen,

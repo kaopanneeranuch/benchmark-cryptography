@@ -61,7 +61,7 @@ void verify_correctness(void)
     fill_pattern(ad_buf, AD_LEN);
 #endif
 
-    skinny_sct_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SCT_KEY_LEN);
 
     skinny_sct_encrypt_auth(&ks, bench_nonce,
                             ad_buf, AD_LEN,
@@ -91,29 +91,7 @@ void verify_correctness(void)
 
 /* ── individual benchmarks ─────────────────────────────── */
 
-static void bench_keygen(void)
-{
-    timing_t start, end;
-    uint64_t total_c = 0, total_ns = 0;
-
-    for (int i = 0; i < WARMUP_ITERS; i++) {
-        skinny_sct_keygen(bench_key, &ks);
-    }
-
-    for (int i = 0; i < BENCH_ITERS; i++) {
-        start = timing_counter_get();
-        skinny_sct_keygen(bench_key, &ks);
-        end = timing_counter_get();
-
-        uint64_t c = timing_cycles_get(&start, &end);
-        total_c  += c;
-        total_ns += timing_cycles_to_ns(c);
-    }
-
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "keygen",
-           (unsigned long long)(total_c / BENCH_ITERS),
-           (unsigned long long)(total_ns / BENCH_ITERS));
-}
+    /* keygen benchmark removed; initialization is done via memcpy */
 
 static void bench_hash(void)
 {
@@ -121,7 +99,7 @@ static void bench_hash(void)
     uint64_t total_c = 0, total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    skinny_sct_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SCT_KEY_LEN);
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         skinny_sct_hash(&ks, bench_nonce,
@@ -155,7 +133,7 @@ static void bench_encrypt(void)
     uint8_t iv[SCT_IV_LEN];
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    skinny_sct_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SCT_KEY_LEN);
 
     skinny_sct_hash(&ks, bench_nonce,
                     ad_buf, AD_LEN,
@@ -192,7 +170,7 @@ static void bench_decrypt(void)
     uint8_t iv[SCT_IV_LEN];
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    skinny_sct_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SCT_KEY_LEN);
 
     skinny_sct_encrypt_auth(&ks, bench_nonce,
                             ad_buf, AD_LEN,
@@ -228,7 +206,7 @@ static void bench_verify(void)
     uint64_t total_c = 0, total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    skinny_sct_keygen(bench_key, &ks);
+    memcpy(ks.key, bench_key, SCT_KEY_LEN);
 
     skinny_sct_hash(&ks, bench_nonce,
                     ad_buf, AD_LEN,
@@ -267,7 +245,6 @@ void bench_sct_all(void)
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
-    bench_keygen();
     bench_hash();
     bench_encrypt();
     bench_decrypt();

@@ -311,13 +311,6 @@ static void zafe_iv_from_tag(const uint8_t tag[ZAFE_TAG_LEN],
 
 /* ----------------------------- public API ----------------------------- */
 
-void forkskinny_zafe_keygen(const uint8_t key[ZAFE_KEY_LEN],
-                            zafe_key_t *ks)
-{
-    memcpy(ks->enc_key, key, ZAFE_ENC_KEY_LEN);
-    memcpy(ks->mac_key, key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
-}
-
 int forkskinny_zafe_auth(const zafe_key_t *ks,
                          const uint8_t *ad, size_t adlen,
                          const uint8_t *msg, size_t mlen,
