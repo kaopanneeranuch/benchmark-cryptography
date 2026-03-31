@@ -61,10 +61,8 @@ void verify_correctness(void)
     fill_pattern(ad_buf, AD_LEN);
 #endif
 
-    skinny_ctr_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
-
-    /* produce ciphertext + tag using GCM API */
-    skinny_gcm_encrypt(bench_key, bench_nonce, 12,
+    /* produce ciphertext + tag using GCM API (combined) */
+    skinny_gcm_encrypt_auth(bench_key, bench_nonce, 12,
                        ad_buf, AD_LEN,
                        pt_buf, MESSAGE_LEN,
                        ct_buf, tag_buf);
@@ -73,7 +71,7 @@ void verify_correctness(void)
     print_hex("CT[0..15]: ", ct_buf, 16);
     print_hex("TAG:       ", tag_buf, 16);
 
-    int rc = skinny_gcm_decrypt(bench_key, bench_nonce, 12,
+    int rc = skinny_gcm_decrypt_verify(bench_key, bench_nonce, 12,
                                 ad_buf, AD_LEN,
                                 ct_buf, MESSAGE_LEN,
                                 tag_buf, dec_buf);
@@ -91,25 +89,7 @@ void verify_correctness(void)
 
 /* ── individual benchmarks ─────────────────────────────── */
 
-static void bench_keygen(void)
-{
-    timing_t start, end;
-    uint64_t total_c = 0, total_ns = 0;
-    for (int i = 0; i < WARMUP_ITERS; i++)
-        skinny_gcm_keygen(bench_key);
-
-    for (int i = 0; i < BENCH_ITERS; i++) {
-        start = timing_counter_get();
-        skinny_gcm_keygen(bench_key);
-        end = timing_counter_get();
-        uint64_t c = timing_cycles_get(&start, &end);
-        total_c  += c;
-        total_ns += timing_cycles_to_ns(c);
-    }
-    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "keygen",
-           (unsigned long long)(total_c / BENCH_ITERS),
-           (unsigned long long)(total_ns / BENCH_ITERS));
-}
+/* keygen benchmark removed */
 
 static void bench_hash(void)
 {
@@ -121,22 +101,13 @@ static void bench_hash(void)
     fill_pattern(ad_buf, AD_LEN);
 #endif
 
-    uint8_t H[16];
-    uint8_t EkJ0[16];
-    skinny_gcm_compute_H(bench_key, H);
-    skinny_gcm_compute_EkJ0(bench_key, bench_nonce, EkJ0);
-
-    for (int i = 0; i < WARMUP_ITERS; i++) {
-        uint8_t S[16];
-        ghash(H, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, S);
-        for (int j = 0; j < 16; j++) tag_buf[j] = EkJ0[j] ^ S[j];
-    }
+    /* measure auth (tag-only) */
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        skinny_gcm_auth(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        uint8_t S[16];
-        ghash(H, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, S);
-        for (int j = 0; j < 16; j++) tag_buf[j] = EkJ0[j] ^ S[j];
+        skinny_gcm_auth(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -155,11 +126,11 @@ static void bench_encrypt(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     /* CTR-mode encryption (no tag) */
     for (int i = 0; i < WARMUP_ITERS; i++)
-        skinny_ctr_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+        skinny_gcm_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        skinny_ctr_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+        skinny_gcm_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -177,14 +148,14 @@ static void bench_decrypt(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     /* produce ciphertext */
-    skinny_ctr_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+    skinny_gcm_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
 
     for (int i = 0; i < WARMUP_ITERS; i++)
-        skinny_ctr_encrypt(bench_key, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
+        skinny_gcm_decrypt(bench_key, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        skinny_ctr_encrypt(bench_key, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
+        skinny_gcm_decrypt(bench_key, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -201,38 +172,18 @@ static void bench_verify(void)
     uint64_t total_c = 0, total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    /* produce valid ciphertext + tag first */
-    skinny_gcm_encrypt(bench_key, bench_nonce, 12,
+    /* produce valid ciphertext + tag first (combined API) */
+    skinny_gcm_encrypt_auth(bench_key, bench_nonce, 12,
                        ad_buf, AD_LEN,
                        pt_buf, MESSAGE_LEN,
                        ct_buf, tag_buf);
 
-    /* prepare H for verification */
-    uint8_t H[16];
-    skinny_gcm_compute_H(bench_key, H);
-
-    for (int i = 0; i < WARMUP_ITERS; i++) {
-        uint8_t S[16];
-        ghash(H, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, S);
-        uint8_t EkJ0[16];
-        skinny_gcm_compute_EkJ0(bench_key, bench_nonce, EkJ0);
-        uint8_t expected[16];
-        for (int j = 0; j < 16; j++) expected[j] = EkJ0[j] ^ S[j];
-        (void)expected; /* warm-up */
-    }
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        (void)skinny_gcm_verify(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
 
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
-        uint8_t S[16];
-        ghash(H, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, S);
-        uint8_t EkJ0[16];
-        skinny_gcm_compute_EkJ0(bench_key, bench_nonce, EkJ0);
-        uint8_t expected[16];
-        for (int j = 0; j < 16; j++) expected[j] = EkJ0[j] ^ S[j];
-        /* constant-time compare not required for benchmark */
-        volatile uint8_t diff = 0;
-        for (int j = 0; j < 16; j++) diff |= (expected[j] ^ tag_buf[j]);
-        (void)diff;
+        (void)skinny_gcm_verify(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
         uint64_t c = timing_cycles_get(&start, &end);
         total_c  += c;
@@ -250,7 +201,6 @@ void bench_gcm_all(void)
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
-    bench_keygen();
     bench_hash();
     bench_encrypt();
     bench_decrypt();

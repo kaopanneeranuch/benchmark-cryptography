@@ -60,7 +60,7 @@ void skinny_ctr_encrypt(const uint8_t key[16], const uint8_t nonce[12], const ui
     }
 }
 
-void skinny_gcm_encrypt(const uint8_t key[16],
+void skinny_gcm_encrypt_auth(const uint8_t key[16],
                        const uint8_t *iv, size_t iv_len,
                        const uint8_t *aad, size_t aad_len,
                        const uint8_t *pt, size_t len,
@@ -98,7 +98,7 @@ void skinny_gcm_encrypt(const uint8_t key[16],
         tag[i] = EkJ0[i] ^ S[i];
 }
 
-int skinny_gcm_decrypt(const uint8_t key[16],
+int skinny_gcm_decrypt_verify(const uint8_t key[16],
                       const uint8_t *iv, size_t iv_len,
                       const uint8_t *aad, size_t aad_len,
                       const uint8_t *ct, size_t len,
@@ -140,6 +140,75 @@ int skinny_gcm_decrypt(const uint8_t key[16],
     }
 
     return 0;
+}
+
+/* CTR-only encrypt (no tag) */
+void skinny_gcm_encrypt(const uint8_t key[16], const uint8_t nonce[12],
+                       const uint8_t *pt, size_t len, uint8_t *ct)
+{
+    skinny_ctr_encrypt(key, nonce, pt, len, ct);
+}
+
+/* CTR-only decrypt (no tag) */
+void skinny_gcm_decrypt(const uint8_t key[16], const uint8_t nonce[12],
+                       const uint8_t *ct, size_t len, uint8_t *pt)
+{
+    skinny_ctr_encrypt(key, nonce, ct, len, pt);
+}
+
+/* Compute tag only */
+void skinny_gcm_auth(const uint8_t key[16],
+                    const uint8_t *iv, size_t iv_len,
+                    const uint8_t *aad, size_t aad_len,
+                    const uint8_t *ct, size_t len,
+                    uint8_t tag[16])
+{
+    uint8_t tk[32];
+    build_tk(tk, key);
+
+    uint8_t zero[16] = {0};
+    uint8_t H[16];
+    skinny_128_256_encrypt_tk_full(tk, H, zero);
+
+    uint8_t J0[16];
+    gcm_derive_j0(H, iv, iv_len, J0);
+
+    uint8_t S[16];
+    ghash(H, aad, aad_len, ct, len, S);
+
+    uint8_t EkJ0[16];
+    skinny_128_256_encrypt_tk_full(tk, EkJ0, J0);
+    for (int i = 0; i < 16; ++i)
+        tag[i] = EkJ0[i] ^ S[i];
+}
+
+/* Verify tag only */
+int skinny_gcm_verify(const uint8_t key[16],
+                     const uint8_t *iv, size_t iv_len,
+                     const uint8_t *aad, size_t aad_len,
+                     const uint8_t *ct, size_t len,
+                     const uint8_t tag[16])
+{
+    uint8_t tk[32];
+    build_tk(tk, key);
+
+    uint8_t zero[16] = {0};
+    uint8_t H[16];
+    skinny_128_256_encrypt_tk_full(tk, H, zero);
+
+    uint8_t J0[16];
+    gcm_derive_j0(H, iv, iv_len, J0);
+
+    uint8_t S[16];
+    ghash(H, aad, aad_len, ct, len, S);
+
+    uint8_t EkJ0[16];
+    skinny_128_256_encrypt_tk_full(tk, EkJ0, J0);
+    uint8_t expected[16];
+    for (int i = 0; i < 16; ++i)
+        expected[i] = EkJ0[i] ^ S[i];
+
+    return ct_memcmp(expected, tag, 16) == 0 ? 0 : -1;
 }
 
 /* ----------------- Benchmark helpers ----------------- */

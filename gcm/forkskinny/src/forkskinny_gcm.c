@@ -81,7 +81,7 @@ void forkskinny_ctr_encrypt(const uint8_t key[16], const uint8_t nonce[12],
     }
 }
 
-void forkskinny_gcm_encrypt(const uint8_t key[16],
+void forkskinny_gcm_encrypt_auth(const uint8_t key[16],
                             const uint8_t *iv, size_t iv_len,
                             const uint8_t *aad, size_t aad_len,
                             const uint8_t *pt, size_t len,
@@ -132,7 +132,7 @@ void forkskinny_gcm_encrypt(const uint8_t key[16],
     }
 }
 
-int forkskinny_gcm_decrypt(const uint8_t key[16],
+int forkskinny_gcm_decrypt_verify(const uint8_t key[16],
                            const uint8_t *iv, size_t iv_len,
                            const uint8_t *aad, size_t aad_len,
                            const uint8_t *ct, size_t len,
@@ -185,6 +185,77 @@ int forkskinny_gcm_decrypt(const uint8_t key[16],
     }
 
     return 0;
+}
+
+/* Simple CTR-only encrypt (no tag) */
+void forkskinny_gcm_encrypt(const uint8_t key[16], const uint8_t nonce[12],
+                           const uint8_t *pt, size_t len, uint8_t *ct)
+{
+    forkskinny_ctr_encrypt(key, nonce, pt, len, ct);
+}
+
+/* Simple CTR-only decrypt (no tag) */
+void forkskinny_gcm_decrypt(const uint8_t key[16], const uint8_t nonce[12],
+                           const uint8_t *ct, size_t len, uint8_t *pt)
+{
+    forkskinny_ctr_encrypt(key, nonce, ct, len, pt);
+}
+
+/* Compute tag only */
+void forkskinny_gcm_auth(const uint8_t key[16],
+                        const uint8_t *iv, size_t iv_len,
+                        const uint8_t *aad, size_t aad_len,
+                        const uint8_t *ct, size_t len,
+                        uint8_t tag[16])
+{
+    uint8_t tk[32];
+    build_tweakey(tk, key);
+    uint8_t zero[16] = {0};
+    uint8_t H[16];
+    uint8_t h0[16], h1[16];
+    forkskinny_128_256_encrypt(tk, h0, h1, zero);
+    for (int i = 0; i < 16; ++i) H[i] = h0[i] ^ h1[i];
+
+    uint8_t J0[16];
+    gcm_derive_j0(H, iv, iv_len, J0);
+
+    uint8_t S[16];
+    ghash(H, aad, aad_len, ct, len, S);
+
+    uint8_t EkJ0[16];
+    uint8_t e0[16], e1[16];
+    forkskinny_128_256_encrypt(tk, e0, e1, J0);
+    for (int i = 0; i < 16; ++i) tag[i] = (e0[i] ^ e1[i]) ^ S[i];
+}
+
+/* Verify tag only */
+int forkskinny_gcm_verify(const uint8_t key[16],
+                        const uint8_t *iv, size_t iv_len,
+                        const uint8_t *aad, size_t aad_len,
+                        const uint8_t *ct, size_t len,
+                        const uint8_t tag[16])
+{
+    uint8_t tk[32];
+    build_tweakey(tk, key);
+    uint8_t zero[16] = {0};
+    uint8_t H[16];
+    uint8_t h0[16], h1[16];
+    forkskinny_128_256_encrypt(tk, h0, h1, zero);
+    for (int i = 0; i < 16; ++i) H[i] = h0[i] ^ h1[i];
+
+    uint8_t J0[16];
+    gcm_derive_j0(H, iv, iv_len, J0);
+
+    uint8_t S[16];
+    ghash(H, aad, aad_len, ct, len, S);
+
+    uint8_t EkJ0[16];
+    uint8_t e0[16], e1[16];
+    forkskinny_128_256_encrypt(tk, e0, e1, J0);
+    uint8_t expected[16];
+    for (int i = 0; i < 16; ++i) expected[i] = (e0[i] ^ e1[i]) ^ S[i];
+
+    return ct_memcmp(expected, tag, 16) == 0 ? 0 : -1;
 }
 
 /* ----------------- Benchmark helper implementations ----------------- */
