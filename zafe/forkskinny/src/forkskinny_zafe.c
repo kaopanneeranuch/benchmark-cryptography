@@ -1,6 +1,7 @@
 #include "forkskinny_zafe.h"
 #include "internal-forkskinny.h"
 #include "fenc.h"
+#include "stm32wrapper.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -33,12 +34,12 @@ static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
     return diff == 0;
 }
 
-static void xor_into(uint8_t *dst, const uint8_t *src, size_t len)
-{
-    for (size_t i = 0; i < len; ++i) {
-        dst[i] ^= src[i];
-    }
-}
+// static void xor_into(uint8_t *dst, const uint8_t *src, size_t len)
+// {
+//     for (size_t i = 0; i < len; ++i) {
+//         dst[i] ^= src[i];
+//     }
+// }
 
 static size_t pad10_len(size_t len, size_t block_len)
 {
@@ -78,225 +79,184 @@ static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
     }
 }
 
-/* doubling in GF(2^128), polynomial x^128 + x^7 + x^2 + x + 1 */
-static void gf_mul_x_n(uint8_t x[N])
-{
-    uint8_t carry = (uint8_t)(x[0] >> 7);
+// /* doubling in GF(2^128), polynomial x^128 + x^7 + x^2 + x + 1 */
+// static void gf_mul_x_n(uint8_t x[N])
+// {
+//     uint8_t carry = (uint8_t)(x[0] >> 7);
 
-    for (int i = 0; i < N - 1; ++i) {
-        x[i] = (uint8_t)((x[i] << 1) | (x[i + 1] >> 7));
-    }
-    x[N - 1] <<= 1;
+//     for (int i = 0; i < N - 1; ++i) {
+//         x[i] = (uint8_t)((x[i] << 1) | (x[i + 1] >> 7));
+//     }
+//     x[N - 1] <<= 1;
 
-    if (carry) {
-        x[N - 1] ^= 0x87U;
+//     if (carry) {
+//         x[N - 1] ^= 0x87U;
+//     }
+// }
+
+/* ----------------------------- ZHASH / ZMAC / ZFMac (streaming, USART-based) ----------------------------- */
+
+/* Map pasted-code macros to local definitions */
+#ifndef KS
+#define KS KEY_LEN
+#endif
+#ifndef TS
+#define TS (ZT_BYTES + 1)
+#endif
+#ifndef BS
+#define BS N
+#endif
+
+#ifndef MIN
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
+
+typedef struct {
+    unsigned char tweakey[KS + TS];
+    unsigned char message[BS];
+    unsigned char mask_l[BS];
+    unsigned char mask_r[BS];
+    unsigned char out[BS * 2];
+} ZmacStruct;
+
+typedef struct {
+    unsigned char u[BS];
+    unsigned char v[TS];
+} MacChains;
+
+static void skinny_encrypt(unsigned char *output, unsigned char *input, unsigned char *key){
+#if BS == 16
+    forkskinny_128_256_encrypt(key, output, NULL, input);
+#else
+    /* fallback if 64-bit variant required */
+    /* call appropriate ForkSkinny 64/192 primitive if available */
+#endif
+}
+
+static void arrXOR(unsigned char *out, unsigned char *right, uint16_t len){
+    for(uint16_t i = 0; i < len; ++i){
+        out[i] ^= right[i];
     }
 }
 
-/* ----------------------------- ForkSkinny helper ----------------------------- */
-
-static void ztbc_encrypt(const uint8_t key[KEY_LEN],
-                         uint8_t domain,
-                         const uint8_t tweak_t[ZT_BYTES],
-                         const uint8_t in[N],
-                         uint8_t out[N])
-{
-    uint8_t tk[TWO_N];
-
-    memset(tk, 0, sizeof(tk));
-    tk[0] = domain;                    /* domain byte */
-    memcpy(tk + 1, tweak_t, ZT_BYTES); /* remaining 120 tweak bits */
-    memcpy(tk + N, key, KEY_LEN);      /* 16-byte key */
-
-    /*
-     * ZHASH/ZFIN use a single n-bit TBC output per call.  Request only the
-     * needed ForkSkinny branch so the implementation matches the paper's
-     * single-leg E_K^i(T, M) abstraction instead of computing and discarding
-     * the second branch.
-     */
-    forkskinny_128_256_encrypt(tk, out, NULL, in);
+static void arrLeftByOne(unsigned char *out, int len){
+    for (int i = 0;  i < len - 1;  ++i){
+        out[i] = (unsigned char)((out[i] << 1) | ((out[i+1] >> 7) & 1));
+    }
+    out[len-1] = (unsigned char)(out[len-1] << 1);
 }
 
-/* ----------------------------- ZHASH / ZMAC / ZFMac ----------------------------- */
+static void arrMULT(unsigned char *out, uint8_t prpol, uint8_t len){
+    uint8_t tmp = (out[len-1] >> 7) & 1;
+    arrLeftByOne(out, len);
+    out[0] ^= prpol * tmp;
+}
 
-static int zhash(const uint8_t key[KEY_LEN],
-                 const uint8_t *x, size_t xlen,
-                 uint8_t U[N],
-                 uint8_t V[ZT_BYTES])
-{
-    uint8_t Ll[N], Lr[N];
-    uint8_t zero_n[N] = {0};
-    uint8_t zero_t[ZT_BYTES] = {0};
-    uint8_t one_t[ZT_BYTES] = {0};
+static void ZHASH(ZmacStruct *pZmac, MacChains *pChains, unsigned char prpol){
+    unsigned char tmp[TS-1], cmask[BS];
+    memcpy(tmp, pZmac->tweakey + KS, TS-1);
 
-    if ((xlen % ZBLOCK_LEN) != 0) {
-        return -1;
-    }
+    arrXOR(pZmac->message, pZmac->mask_l, BS);
+    arrXOR(pZmac->tweakey + KS, pZmac->mask_r, MIN(TS-1, BS));
 
-    memset(U, 0, N);
-    memset(V, 0, ZT_BYTES);
+    pZmac->tweakey[KS + TS-1] = 0x08;
+    skinny_encrypt(cmask, pZmac->message, pZmac->tweakey);
 
-    /* Ll <- E^9_K(0^t, 0^n) */
-    ztbc_encrypt(key, 9, zero_t, zero_n, Ll);
+    arrXOR(pChains->u, cmask, BS);
+    arrMULT(pChains->u, prpol, BS);
 
-    /* Lr <- E^9_K(0^(t-1)1, 0^n) */
-    one_t[ZT_BYTES - 1] = 0x01U;
-    ztbc_encrypt(key, 9, one_t, zero_n, Lr);
+    arrXOR(tmp, cmask, MIN(TS-1, BS));
+    arrXOR(pChains->v, tmp, TS-1);
 
-    for (size_t off = 0; off < xlen; off += ZBLOCK_LEN) {
-        const uint8_t *Xl = x + off;
-        const uint8_t *Xr = x + off + N;
+    arrMULT(pZmac->mask_l, prpol, BS);
+    arrMULT(pZmac->mask_r, prpol, BS);
+}
 
-        uint8_t Sl[N];
-        uint8_t Sr[ZT_BYTES];
-        uint8_t Cl[N];
-        uint8_t Cr[ZT_BYTES];
+static void ZFIN(ZmacStruct *pZmac, uint8_t fin){
+    unsigned char tmp[BS];
+    /* Y_1 */
+    pZmac->tweakey[KS+TS-1] = fin;
+    skinny_encrypt(pZmac->out, pZmac->message, pZmac->tweakey);
 
-        /* Sl <- Ll XOR Xl */
-        for (size_t i = 0; i < N; ++i) {
-            Sl[i] = (uint8_t)(Ll[i] ^ Xl[i]);
+    ++pZmac->tweakey[KS+TS-1];
+    skinny_encrypt(tmp, pZmac->message, pZmac->tweakey);
+    arrXOR(pZmac->out, tmp, BS);
+
+    /* Y_2 */
+    ++pZmac->tweakey[KS+TS-1];
+    skinny_encrypt(&pZmac->out[BS], pZmac->message, pZmac->tweakey);
+
+    ++pZmac->tweakey[KS+TS-1];
+    skinny_encrypt(tmp, pZmac->message, pZmac->tweakey);
+    arrXOR(&pZmac->out[BS], tmp, BS);
+}
+
+static void ZMAC_padding(ZmacStruct *pZmac, uint8_t *fin, uint8_t res, uint64_t *cc){
+    if (res){
+        memset(pZmac->message, 0, BS);
+        memset(pZmac->tweakey + KS, 0, TS);
+        if(res >= BS){
+            res -= BS;
+            pZmac->tweakey[KS+res] ^= (1<<7);
+            recv_USART_bytes(pZmac->message, BS,cc);
+            recv_USART_bytes(pZmac->tweakey + KS, res,cc);
+        } else{
+            recv_USART_bytes(pZmac->message, res,cc);
+            pZmac->message[res] ^= (1<<7);
         }
-
-        /* Sr <- msb_t(Lr) XOR Xr */
-        for (size_t i = 0; i < ZT_BYTES; ++i) {
-            Sr[i] = (uint8_t)(Lr[i] ^ Xr[i]);
-        }
-
-        /* Cl <- E^8_K(Sr, Sl) */
-        ztbc_encrypt(key, 8, Sr, Sl, Cl);
-
-        /* Cr <- msb_t(Cl) XOR Xr */
-        for (size_t i = 0; i < ZT_BYTES; ++i) {
-            Cr[i] = (uint8_t)(Cl[i] ^ Xr[i]);
-        }
-
-        /* U <- 2(U XOR Cl) */
-        xor_into(U, Cl, N);
-        gf_mul_x_n(U);
-
-        /* V <- V XOR Cr */
-        xor_into(V, Cr, ZT_BYTES);
-
-        /* (Ll, Lr) <- (2Ll, 2Lr) */
-        gf_mul_x_n(Ll);
-        gf_mul_x_n(Lr);
-    }
-
-    return 0;
-}
-
-static void zfin(const uint8_t key[KEY_LEN],
-                 uint8_t i,
-                 const uint8_t U[N],
-                 const uint8_t V[ZT_BYTES],
-                 uint8_t out[TWO_N])
-{
-    uint8_t a[N], b[N], c[N], d[N];
-
-    ztbc_encrypt(key, (uint8_t)(i + 0), V, U, a);
-    ztbc_encrypt(key, (uint8_t)(i + 1), V, U, b);
-    ztbc_encrypt(key, (uint8_t)(i + 2), V, U, c);
-    ztbc_encrypt(key, (uint8_t)(i + 3), V, U, d);
-
-    for (size_t j = 0; j < N; ++j) {
-        out[j]     = (uint8_t)(a[j] ^ b[j]);
-        out[N + j] = (uint8_t)(c[j] ^ d[j]);
+        *fin = 4;
+    } else{
+        recv_USART_bytes(pZmac->message, BS, cc);
+        recv_USART_bytes(pZmac->tweakey + KS, TS-1, cc);
+        *fin = 0;
     }
 }
 
-static int zmac(const uint8_t key[KEY_LEN],
-                const uint8_t *msg, size_t msg_len,
-                uint8_t out[TWO_N])
-{
-    uint8_t U[N];
-    uint8_t V[ZT_BYTES];
-    uint8_t *X;
-    size_t x_len;
-    int rc;
+static void ZMAC_encrypt(unsigned char *out_left, unsigned char *out_right, unsigned char *key, uint32_t mlen, uint64_t *cc){
+    DWT_CYCCNT = 0;
+    uint8_t pbsize = TS+BS-1;
+    uint8_t res = mlen%pbsize, fin = 0;
+    uint16_t nP_complete = (res) ? (uint16_t)(mlen/pbsize) : (uint16_t)((mlen/pbsize)-1);
+    ZmacStruct Zmac;
+    MacChains Chains;
 
-    if (!key || !out) {
-        return -1;
+    memcpy(Zmac.tweakey, key, KS);
+    memset(Zmac.tweakey + KS, 0, TS);
+    memset(Zmac.message, 0, BS);
+    memset(Chains.u, 0, BS);
+    memset(Chains.v, 0, TS);
+
+#if BS == 16
+        unsigned char prpol = 0b10000111;
+#else
+        unsigned char prpol = 0b00011011;
+#endif
+
+    Zmac.tweakey[KS+TS-1] = 0x09;
+    skinny_encrypt(Zmac.mask_l, Zmac.message, Zmac.tweakey);
+
+    Zmac.tweakey[KS+TS-2] = 0x01;
+    skinny_encrypt(Zmac.mask_r, Zmac.message, Zmac.tweakey);
+
+    send_USART_bytes(&pbsize,1,cc);
+    for(uint16_t i = 0;i<nP_complete; ++i){
+        recv_USART_bytes(Zmac.message, BS,cc);
+        recv_USART_bytes(Zmac.tweakey + KS, TS-1,cc);
+        ZHASH(&Zmac, &Chains, prpol);
+        send_USART_bytes(0,1,cc);
     }
-    if (msg_len != 0 && !msg) {
-        return -1;
-    }
+    ZMAC_padding(&Zmac, &fin, res, cc);
 
-    /* X <- Pad10(M), with ZHASH block length n+t' = 31 bytes */
-    x_len = pad10_len(msg_len, ZBLOCK_LEN);
-    X = (uint8_t *)malloc(x_len);
-    if (!X) {
-        return -1;
-    }
+    ZHASH(&Zmac, &Chains, prpol);
+    memcpy(Zmac.tweakey + KS, Chains.v, TS);
+    memcpy(Zmac.message, Chains.u, BS);
+    ZFIN(&Zmac, fin);
+    send_USART_bytes(0,1,cc);
 
-    (void)pad10(X, msg, msg_len, ZBLOCK_LEN);
-
-    rc = zhash(key, X, x_len, U, V);
-    free(X);
-    if (rc != 0) {
-        return -1;
-    }
-
-    /* if (n+t') divides |M| use i=0, else i=4 */
-    if ((msg_len % ZBLOCK_LEN) == 0) {
-        zfin(key, 0, U, V, out);
-    } else {
-        zfin(key, 4, U, V, out);
-    }
-
-    ct_memzero(U, sizeof(U));
-    ct_memzero(V, sizeof(V));
-    return 0;
+    memcpy(out_left, Zmac.out, BS);
+    memcpy(out_right, Zmac.out +BS, BS);
 }
 
-static int zfmac(const uint8_t key[KEY_LEN],
-                 const uint8_t *ad, size_t ad_len,
-                 const uint8_t *msg, size_t msg_len,
-                 uint8_t *tag, size_t tag_len)
-{
-    uint8_t full[TWO_N];
-    uint8_t *X;
-    size_t a_pad_len, m_pad_len, x_len;
-    size_t off = 0;
-    int rc;
-
-    if (!key || !tag) {
-        return -1;
-    }
-    if ((ad_len != 0 && !ad) || (msg_len != 0 && !msg)) {
-        return -1;
-    }
-    if (tag_len > TWO_N) {
-        return -1;
-    }
-
-    /* X <- Pad10(A) || Pad10(M) || <|A|>_n || <|M|>_n */
-    a_pad_len = pad10_len(ad_len, ZBLOCK_LEN);
-    m_pad_len = pad10_len(msg_len, ZBLOCK_LEN);
-    x_len = a_pad_len + m_pad_len + TWO_N;
-
-    X = (uint8_t *)malloc(x_len);
-    if (!X) {
-        return -1;
-    }
-
-    off += pad10(X + off, ad, ad_len, ZBLOCK_LEN);
-    off += pad10(X + off, msg, msg_len, ZBLOCK_LEN);
-    encode_bitlen_be128(X + off, ad_len);
-    off += N;
-    encode_bitlen_be128(X + off, msg_len);
-    off += N;
-
-    rc = zmac(key, X, x_len, full);
-    free(X);
-    if (rc != 0) {
-        ct_memzero(full, sizeof(full));
-        return -1;
-    }
-
-    memcpy(tag, full, tag_len);
-    ct_memzero(full, sizeof(full));
-    return 0;
-}
 
 /* ----------------------------- IV derivation for GCTR core ----------------------------- */
 
@@ -307,6 +267,26 @@ static void zafe_iv_from_tag(const uint8_t tag[ZAFE_TAG_LEN],
                              uint8_t iv[TWO_N])
 {
     memcpy(iv, tag, TWO_N);
+}
+
+/* ----------------------------- zfmac wrapper (streaming) ----------------------------- */
+
+static int zfmac(const unsigned char key[KEY_LEN],
+                 const unsigned char *ad, size_t adlen,
+                 const unsigned char *msg, size_t mlen,
+                 unsigned char *tag, size_t taglen)
+{
+    unsigned char out_l[BS], out_r[BS];
+    uint64_t cc = 0;
+
+    if (taglen < TWO_N) return -1;
+
+    ZMAC_encrypt(out_l, out_r, (unsigned char *)key, (uint32_t)mlen, &cc);
+
+    memcpy(tag, out_l, BS);
+    memcpy(tag + BS, out_r, BS);
+
+    return 0;
 }
 
 /* ----------------------------- public API ----------------------------- */
