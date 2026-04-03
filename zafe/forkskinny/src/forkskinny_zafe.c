@@ -41,43 +41,43 @@ static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
 //     }
 // }
 
-static size_t pad10_len(size_t len, size_t block_len)
-{
-    return len + 1 + ((block_len - ((len + 1) % block_len)) % block_len);
-}
+// static size_t pad10_len(size_t len, size_t block_len)
+// {
+//     return len + 1 + ((block_len - ((len + 1) % block_len)) % block_len);
+// }
 
-static size_t pad10(uint8_t *out, const uint8_t *in, size_t len, size_t block_len)
-{
-    size_t padded_len = pad10_len(len, block_len);
+// static size_t pad10(uint8_t *out, const uint8_t *in, size_t len, size_t block_len)
+// {
+//     size_t padded_len = pad10_len(len, block_len);
 
-    if (len > 0 && in != NULL) {
-        memcpy(out, in, len);
-    }
+//     if (len > 0 && in != NULL) {
+//         memcpy(out, in, len);
+//     }
 
-    out[len] = 0x80;
-    if (padded_len > len + 1) {
-        memset(out + len + 1, 0, padded_len - len - 1);
-    }
+//     out[len] = 0x80;
+//     if (padded_len > len + 1) {
+//         memset(out + len + 1, 0, padded_len - len - 1);
+//     }
 
-    return padded_len;
-}
+//     return padded_len;
+// }
 
-static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
-{
-    uint64_t hi = ((uint64_t)len_bytes) >> 61;
-    uint64_t lo = ((uint64_t)len_bytes) << 3;
+// static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
+// {
+//     uint64_t hi = ((uint64_t)len_bytes) >> 61;
+//     uint64_t lo = ((uint64_t)len_bytes) << 3;
 
-    memset(out, 0, N);
+//     memset(out, 0, N);
 
-    for (int i = 7; i >= 0; --i) {
-        out[i] = (uint8_t)(hi & 0xFFU);
-        hi >>= 8;
-    }
-    for (int i = 15; i >= 8; --i) {
-        out[i] = (uint8_t)(lo & 0xFFU);
-        lo >>= 8;
-    }
-}
+//     for (int i = 7; i >= 0; --i) {
+//         out[i] = (uint8_t)(hi & 0xFFU);
+//         hi >>= 8;
+//     }
+//     for (int i = 15; i >= 8; --i) {
+//         out[i] = (uint8_t)(lo & 0xFFU);
+//         lo >>= 8;
+//     }
+// }
 
 // /* doubling in GF(2^128), polynomial x^128 + x^7 + x^2 + x + 1 */
 // static void gf_mul_x_n(uint8_t x[N])
