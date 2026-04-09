@@ -23,7 +23,7 @@
  *
  */
 
-#define SUPERSONIC_STAR_BK256_ROUNDS 32u
+#define SUPERSONIC_STAR_BK256_ROUNDS 48u
 
 /* Call counters */
 static uint32_t cnt_1leg;

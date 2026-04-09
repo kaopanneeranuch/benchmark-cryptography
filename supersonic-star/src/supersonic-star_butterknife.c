@@ -24,7 +24,7 @@
  */
 
 #define SUPERSONIC_STAR_BK256_ROUNDS 32u
-#define SUPERSONIC_STAR_DEOXYS_ROUNDS 10u   /* 10/14 ≈ same reduction ratio as SKINNY 32/48 */
+#define SUPERSONIC_STAR_DEOXYS_ROUNDS 14u
 
 /* Call counters */
 static uint32_t cnt_1leg;
