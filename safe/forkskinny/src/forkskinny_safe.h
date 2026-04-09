@@ -18,10 +18,15 @@ int forkskinny_safe_auth(const safe_key_t *ks,
                          const uint8_t *msg, size_t mlen,
                          uint8_t tag[SAFE_TAG_LEN]);
 
+/* 16-byte-chunk test variants: process input in 16-byte logical chunks
+    but keep the underlying 32-byte PRF/field math. Useful for benchmarking. */
+
 int forkskinny_safe_verify(const safe_key_t *ks,
                            const uint8_t *ad, size_t adlen,
                            const uint8_t *msg, size_t mlen,
                            const uint8_t tag[SAFE_TAG_LEN]);
+
+/* legacy: 16-byte logical-chunk wrappers removed for full 16-byte design */
 
 void forkskinny_safe_encrypt(const safe_key_t *ks,
                              const uint8_t tag[SAFE_TAG_LEN],

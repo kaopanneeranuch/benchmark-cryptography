@@ -138,6 +138,8 @@ static void bench_hash(void)
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
+
+/* no separate 16-byte wrapper benchmark: bench_hash measures the 16-byte design */
 /* raw FEnc benchmark only */
 static void bench_encrypt(void)
 {
@@ -262,6 +264,8 @@ static void bench_verify(void)
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
 
+/* no separate 16-byte verify benchmark */
+
 /* ── top-level entry ───────────────────────────────────── */
 void bench_safe_all(void)
 {
@@ -275,6 +279,7 @@ void bench_safe_all(void)
     bench_encrypt();
     bench_decrypt();
     bench_verify();
+    
 
     printk("--- Benchmark complete ---\n\n");
 }

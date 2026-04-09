@@ -9,6 +9,7 @@
 #include "include/sonics_ref.h"
 #include "include/supersonic_fs_star.h"
 #include "include/supersonic_bk_star.h"
+#include "include/butterknife.h"
 
 #define WARMUP_ITERS 10
 #define BENCH_ITERS  100
@@ -72,13 +73,39 @@ static void bench_supersonic_star_variant(const char *name, supersonic_fn_t fn, 
            total_ns / BENCH_ITERS);
 }
 
+#define TOTAL_ITERS (WARMUP_ITERS + BENCH_ITERS)
+
+static void print_counters(uint32_t oneleg, uint32_t twoleg)
+{
+    printk("    encrypt calls/MAC: 1-leg=%" PRIu32 "  2-leg=%" PRIu32 "\n",
+           oneleg / TOTAL_ITERS, twoleg / TOTAL_ITERS);
+}
+
 static void bench_size(uint32_t mlen)
 {
+    uint32_t oneleg, twoleg;
+
     printk("\n[Message size: %u bytes]\n", mlen);
-    // bench_supersonic_star_variant("supersonic_256_forkskinny", supersonic_256_star, mlen);
-    // bench_supersonic_star_variant("supersonic_384_forkskinny", supersonic_384_star, mlen);
-    bench_supersonic_star_variant("supersonic_256_bk_exact", supersonic_256_butterknife_deoxys_exact, mlen);
-    bench_supersonic_star_variant("supersonic_256_bk_star", supersonic_256_butterknife_star, mlen);
+
+    supersonic_fs_star_reset_counters();
+    bench_supersonic_star_variant("supersonic_256_forkskinny", supersonic_256_star, mlen);
+    supersonic_fs256_star_get_counters(&oneleg, &twoleg);
+    print_counters(oneleg, twoleg);
+
+    supersonic_fs_star_reset_counters();
+    bench_supersonic_star_variant("supersonic_384_forkskinny", supersonic_384_star, mlen);
+    supersonic_fs384_star_get_counters(&oneleg, &twoleg);
+    print_counters(oneleg, twoleg);
+
+    supersonic_bk_deoxys_reset_counters();
+    bench_supersonic_star_variant("supersonic_256_bk_deoxys", supersonic_256_butterknife_deoxys, mlen);
+    supersonic_bk_deoxys_get_counters(&oneleg, &twoleg);
+    print_counters(oneleg, twoleg);
+
+    supersonic_bk_skinny_reset_counters();
+    bench_supersonic_star_variant("supersonic_256_bk_skinny", supersonic_256_butterknife_skinny, mlen);
+    supersonic_bk_skinny_get_counters(&oneleg, &twoleg);
+    print_counters(oneleg, twoleg);
 }
 
 int main(void)
@@ -86,7 +113,7 @@ int main(void)
     timing_init();
     timing_start();
 
-    printk("\n=== Supersonic Star Benchmark ===\n");
+    printk("\n=== Supersonic Star Benchmark (Deoxys / Butterknife / Skinny) ===\n");
     printk("iters=%d, warmup=%d\n", BENCH_ITERS, WARMUP_ITERS);
     printk("format: <variant> <size> : <avg cycles> | <avg ns>\n");
 

@@ -87,6 +87,31 @@ static void MixColumns(uint32_t state[4])
   }
 }
 
+void deoxysBC_256_encrypt_star_w_rtk(const uint32_t *rtk, uint8_t output[16],
+                                      const uint8_t message[16], uint8_t rounds)
+{
+    uint8_t round;
+    uint32_t state[4];
+
+    state[0] = GETU32(message     );
+    state[1] = GETU32(message +  4);
+    state[2] = GETU32(message +  8);
+    state[3] = GETU32(message + 12);
+
+    for (round = 0; round < rounds; ++round) {
+        AddRoundKey(state, rtk + 4*round, 0);
+        SubBytes(state);
+        ShiftRows(state);
+        MixColumns(state);
+    }
+    AddRoundKey(state, rtk + rounds*4, 0);
+
+    PUTU32(output     , state[0]);
+    PUTU32(output +  4, state[1]);
+    PUTU32(output +  8, state[2]);
+    PUTU32(output + 12, state[3]);
+}
+
 void deoxysBC_256_encrypt_w_rtk(const uint32_t rtk[4*15], uint8_t output[16], const uint8_t message[16]){
   uint8_t round = 0;
   uint32_t state[4];

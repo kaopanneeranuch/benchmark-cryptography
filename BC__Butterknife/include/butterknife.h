@@ -23,9 +23,11 @@
 
 /* Tweakey Schedule */
 void butterknife_256_precompute_rtk(const uint8_t tweakey[32], uint32_t* rtk, const uint8_t num_branch);
+void deoxysBC_256_precompute_rtk_star(const uint8_t tweakey[32], uint32_t *rtk, uint8_t rounds);
 
 /* Encryption */
 void deoxysBC_256_encrypt_w_rtk(const uint32_t rtk[4*15], uint8_t output[16], const uint8_t message[16]);
+void deoxysBC_256_encrypt_star_w_rtk(const uint32_t *rtk, uint8_t output[16], const uint8_t message[16], uint8_t rounds);
 void deoxysBC_256_encrypt(const uint8_t tweakey[32], uint8_t output[16], const uint8_t message[16]);
 
 void butterknife_256_encrypt_w_rtk(const uint32_t rtk[4*16], uint8_t* output, const uint8_t message[16], const uint8_t num_branches);

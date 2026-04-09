@@ -19,6 +19,11 @@ void supersonic_192_star(const uint8_t key[16],
                          uint8_t out_left[8], uint8_t out_right[8],
                          const uint8_t *message, const uint32_t mlen);
 
+/* Call counters */
+void supersonic_fs_star_reset_counters(void);
+void supersonic_fs256_star_get_counters(uint32_t *oneleg, uint32_t *twoleg);
+void supersonic_fs384_star_get_counters(uint32_t *oneleg, uint32_t *twoleg);
+
 #ifdef __cplusplus
 }
 #endif

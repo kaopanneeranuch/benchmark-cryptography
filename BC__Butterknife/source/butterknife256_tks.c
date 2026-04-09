@@ -60,6 +60,25 @@ static void H (uint8_t tweakey[]) {
  if num_branch = 0 key schedule for Deoxys-BC (one less round)
  branch-specific additional RC get added in butterknife256 AddRoundKey()
 */
+void deoxysBC_256_precompute_rtk_star(const uint8_t tweakey[32], uint32_t *rtk, uint8_t rounds)
+{
+    uint8_t r;
+    uint8_t tk[2][16];
+    uint32_t rcon_row1 = 0x01020408;
+
+    memcpy(tk[0], tweakey +  0, 16);
+    memcpy(tk[1], tweakey + 16, 16);
+
+    for (r = 0; r <= rounds; ++r) {
+        rtk[4*r + 0] = GETU32(tk[0] +  0) ^ GETU32(tk[1] +  0) ^ rcon_row1;
+        rtk[4*r + 1] = GETU32(tk[0] +  4) ^ GETU32(tk[1] +  4) ^ GETRCON(r);
+        rtk[4*r + 2] = GETU32(tk[0] +  8) ^ GETU32(tk[1] +  8);
+        rtk[4*r + 3] = GETU32(tk[0] + 12) ^ GETU32(tk[1] + 12);
+        H(tk[0]); G(tk[0], 2);
+        H(tk[1]); G(tk[1], 1);
+    }
+}
+
 void butterknife_256_precompute_rtk(const uint8_t tweakey[32], uint32_t* rtk, const uint8_t num_branch)
 {
   uint8_t r;

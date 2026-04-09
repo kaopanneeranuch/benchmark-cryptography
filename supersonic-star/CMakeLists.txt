@@ -11,6 +11,7 @@ zephyr_include_directories(
 
 target_sources(app PRIVATE 
     src/main.c
+    src/supersonic-star_butterknife_skinny.c
     src/supersonic-star_butterknife.c
     src/supersonic-star_forkskinny.c
     ../BC__Butterknife/source/butterknife256_tks.c

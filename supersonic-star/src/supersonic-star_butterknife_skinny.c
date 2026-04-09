@@ -24,18 +24,17 @@
  */
 
 #define SUPERSONIC_STAR_BK256_ROUNDS 32u
-#define SUPERSONIC_STAR_DEOXYS_ROUNDS 10u   /* 10/14 ≈ same reduction ratio as SKINNY 32/48 */
 
 /* Call counters */
 static uint32_t cnt_1leg;
 static uint32_t cnt_2leg;
 
-void supersonic_bk_deoxys_reset_counters(void)
+void supersonic_bk_skinny_reset_counters(void)
 {
     cnt_1leg = cnt_2leg = 0;
 }
 
-void supersonic_bk_deoxys_get_counters(uint32_t *oneleg, uint32_t *twoleg)
+void supersonic_bk_skinny_get_counters(uint32_t *oneleg, uint32_t *twoleg)
 {
     *oneleg = cnt_1leg;
     *twoleg = cnt_2leg;
@@ -66,61 +65,112 @@ static void arrDOUBLE_128(uint8_t out[16])
 /* ------------------------------------------------------------------------- */
 
 /*
- * EXACT helper: full 14-round Deoxys-BC-256.
+ * EXACT helper:
+ * same low-level pattern as deoxys.c:
+ *   TK1 = key part
+ *   TK2 = tweak part
+ *   full-round SKINNY-128-256 with tweakey schedules
  */
 static void deoxysBC_256_encrypt_exact(const uint8_t tk[32],
-                                       uint32_t *rtk,
                                        uint8_t out[16],
                                        const uint8_t in[16])
 {
-    butterknife_256_precompute_rtk(tk, rtk, 0);
-    deoxysBC_256_encrypt_w_rtk(rtk, out, in);
-    cnt_1leg++;
+    static skinny_128_256_tweakey_schedule_t tks1, tks2;
+
+    skinny_128_256_init_tk1(&tks1, tk,      SKINNY_128_256_ROUNDS);
+    skinny_128_256_init_tk2(&tks2, tk + 16, SKINNY_128_256_ROUNDS);
+    skinny_128_256_encrypt_with_tks(&tks1, &tks2, out, in);
 }
 
 /*
- * STAR helper: reduced SUPERSONIC_STAR_DEOXYS_ROUNDS-round Deoxys-BC-256.
+ * STAR helper:
+ * same Deoxys-BC-256 style structure, but reduced rounds for speed testing.
  */
 static void deoxysBC_256_encrypt_star(const uint8_t tk[32],
-                                      uint32_t *rtk,
                                       uint8_t out[16],
                                       const uint8_t in[16])
 {
-    deoxysBC_256_precompute_rtk_star(tk, rtk, SUPERSONIC_STAR_DEOXYS_ROUNDS);
-    deoxysBC_256_encrypt_star_w_rtk(rtk, out, in, SUPERSONIC_STAR_DEOXYS_ROUNDS);
+    static skinny_128_256_tweakey_schedule_t tks1, tks2;
+    skinny_128_256_state_t state;
+
+    skinny_128_256_init_tk1(&tks1, tk,      SUPERSONIC_STAR_BK256_ROUNDS);
+    skinny_128_256_init_tk2(&tks2, tk + 16, SUPERSONIC_STAR_BK256_ROUNDS);
+
+    state.S[0] = le_load_word32(in);
+    state.S[1] = le_load_word32(in + 4);
+    state.S[2] = le_load_word32(in + 8);
+    state.S[3] = le_load_word32(in + 12);
+
+    skinny_128_256_rounds(&state, &tks1, &tks2, 0, SUPERSONIC_STAR_BK256_ROUNDS);
     cnt_1leg++;
+
+    le_store_word32(out,      state.S[0]);
+    le_store_word32(out + 4,  state.S[1]);
+    le_store_word32(out + 8,  state.S[2]);
+    le_store_word32(out + 12, state.S[3]);
 }
 
 /* ------------------------------------------------------------------------- */
 /* Shared per-round logic                                                    */
 /* ------------------------------------------------------------------------- */
 
-static void supersonic_256_round_core(Sonics_256_struct_t *Sonic,
-                                      SonicChains *Chains,
-                                      uint8_t buffer[SONICS_256_N_SIZE],
-                                      uint16_t Nr,
-                                      int use_star)
+static void supersonic_256_round_exact(Sonics_256_struct_t *Sonic,
+                                       SonicChains *Chains,
+                                       uint8_t buffer[SONICS_256_N_SIZE],
+                                       uint16_t Nr)
 {
     uint8_t tk[32];
 
-    arrXOR(Chains->kt, Sonic->P + SONICS_256_N_SIZE, SONICS_256_K_SIZE);
-    arrXOR(Sonic->P, Sonic->mask, SONICS_256_N_SIZE);
-    arrXOR(Sonic->P + SONICS_256_N_SIZE, Sonic->K_prime, SONICS_256_K_SIZE);
+    /* Round function */
+    arrXOR(Chains->kt, Sonic->P + SONICS_256_N_SIZE, SONICS_256_K_SIZE);             /* k-chain */
+    arrXOR(Sonic->P, Sonic->mask, SONICS_256_N_SIZE);                                 /* input-block */
+    arrXOR(Sonic->P + SONICS_256_N_SIZE, Sonic->K_prime, SONICS_256_K_SIZE);          /* key-block */
 
+    /* Set counter into 12 bits but keep last 4 empty */
     Sonic->P[SONICS_256_P_SIZE - 1] = (uint8_t)((Nr + 1) & 0xff);
     Sonic->P[SONICS_256_P_SIZE]     = (uint8_t)(((Nr + 1) & 0x0f00) >> 4);
 
+    /*
+     * Deoxys-BC-256 tweakey = KEY || TWEAK
+     */
     memcpy(tk,      Sonic->P + SONICS_256_N_SIZE,                     16);
     memcpy(tk + 16, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, 16);
 
-    if (use_star)
-        deoxysBC_256_encrypt_star(tk, Sonic->bk_rtk, buffer, Sonic->P);
-    else
-        deoxysBC_256_encrypt_exact(tk, Sonic->bk_rtk, buffer, Sonic->P);
+    deoxysBC_256_encrypt_exact(tk, buffer, Sonic->P);
 
-    arrXOR(Chains->m, buffer, SONICS_256_N_SIZE);
+    arrXOR(Chains->m, buffer, SONICS_256_N_SIZE);                                    /* m-chain */
     arrDOUBLE_128(Chains->m);
-    arrXOR(buffer, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, SONICS_256_T_SIZE);
+    arrXOR(buffer, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, SONICS_256_T_SIZE); /* t-chain */
+    arrXOR(Chains->kt + SONICS_256_K_SIZE, buffer, SONICS_256_T_SIZE);
+}
+
+static void supersonic_256_round_star(Sonics_256_struct_t *Sonic,
+                                      SonicChains *Chains,
+                                      uint8_t buffer[SONICS_256_N_SIZE],
+                                      uint16_t Nr)
+{
+    uint8_t tk[32];
+
+    /* Round function */
+    arrXOR(Chains->kt, Sonic->P + SONICS_256_N_SIZE, SONICS_256_K_SIZE);             /* k-chain */
+    arrXOR(Sonic->P, Sonic->mask, SONICS_256_N_SIZE);                                 /* input-block */
+    arrXOR(Sonic->P + SONICS_256_N_SIZE, Sonic->K_prime, SONICS_256_K_SIZE);          /* key-block */
+
+    /* Set counter into 12 bits but keep last 4 empty */
+    Sonic->P[SONICS_256_P_SIZE - 1] = (uint8_t)((Nr + 1) & 0xff);
+    Sonic->P[SONICS_256_P_SIZE]     = (uint8_t)(((Nr + 1) & 0x0f00) >> 4);
+
+    /*
+     * Deoxys-BC-256 tweakey = KEY || TWEAK
+     */
+    memcpy(tk,      Sonic->P + SONICS_256_N_SIZE,                     16);
+    memcpy(tk + 16, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, 16);
+
+    deoxysBC_256_encrypt_star(tk, buffer, Sonic->P);
+
+    arrXOR(Chains->m, buffer, SONICS_256_N_SIZE);                                    /* m-chain */
+    arrDOUBLE_128(Chains->m);
+    arrXOR(buffer, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, SONICS_256_T_SIZE); /* t-chain */
     arrXOR(Chains->kt + SONICS_256_K_SIZE, buffer, SONICS_256_T_SIZE);
 }
 
@@ -174,7 +224,11 @@ static void supersonic_256_butterknife_core(
          */
         memcpy(Sonic.P, message + (SONICS_256_P_SIZE - 1) * i, (SONICS_256_P_SIZE - 1));
 
-        supersonic_256_round_core(&Sonic, &Chains, buffer, i, use_star);
+        if (use_star) {
+            supersonic_256_round_star(&Sonic, &Chains, buffer, i);
+        } else {
+            supersonic_256_round_exact(&Sonic, &Chains, buffer, i);
+        }
     }
 
     /* Padding */
@@ -184,7 +238,11 @@ static void supersonic_256_butterknife_core(
            message + numP * (SONICS_256_P_SIZE - 1),
            (SONICS_256_P_SIZE - 1) * (res == 0) + res);
 
-    supersonic_256_round_core(&Sonic, &Chains, buffer, numP, use_star);
+    if (use_star) {
+        supersonic_256_round_star(&Sonic, &Chains, buffer, numP);
+    } else {
+        supersonic_256_round_exact(&Sonic, &Chains, buffer, numP);
+    }
 
     /* Final 2-leg call stays Butterknife */
     Chains.kt[SONICS_256_K_SIZE + SONICS_256_T_SIZE] = 0b01 + (0b10 * (res > 0));
@@ -203,7 +261,7 @@ static void supersonic_256_butterknife_core(
 /* Public entry points                                                       */
 /* ------------------------------------------------------------------------- */
 
-void supersonic_256_butterknife_deoxys(const uint8_t key[16],
+void supersonic_256_butterknife_skinny(const uint8_t key[16],
                                        uint8_t out_left[16],
                                        uint8_t out_right[16],
                                        const uint8_t *message,

@@ -18,6 +18,30 @@
 #define SUPERSONIC_STAR_256_ROUNDS 32u
 #define SUPERSONIC_STAR_192_ROUNDS 28u
 
+/* Call counters (reset via supersonic_fs_star_reset_counters) */
+static uint32_t cnt_256_1leg;
+static uint32_t cnt_256_2leg;
+static uint32_t cnt_384_1leg;
+static uint32_t cnt_384_2leg;
+
+void supersonic_fs_star_reset_counters(void)
+{
+    cnt_256_1leg = cnt_256_2leg = 0;
+    cnt_384_1leg = cnt_384_2leg = 0;
+}
+
+void supersonic_fs256_star_get_counters(uint32_t *oneleg, uint32_t *twoleg)
+{
+    *oneleg = cnt_256_1leg;
+    *twoleg = cnt_256_2leg;
+}
+
+void supersonic_fs384_star_get_counters(uint32_t *oneleg, uint32_t *twoleg)
+{
+    *oneleg = cnt_384_1leg;
+    *twoleg = cnt_384_2leg;
+}
+
 static void arrXOR(uint8_t *out, const uint8_t *right, uint16_t len)
 {
     for (uint8_t i = 0; i < len; ++i) {
@@ -75,6 +99,7 @@ static void skinny_128_256_oneleg_star(uint8_t out[16],
     state.S[3] = le_load_word32(input + 12);
 
     skinny_128_256_rounds(&state, &tks1, &tks2, 0, SUPERSONIC_STAR_256_ROUNDS);
+    cnt_256_1leg++;
 
     le_store_word32(out,      state.S[0]);
     le_store_word32(out + 4,  state.S[1]);
@@ -138,6 +163,7 @@ static void supersonic_384_round_fork(Sonics_384_struct_t *Sonic,
         FORKSKINNY_128_384_ROUNDS_BEFORE + FORKSKINNY_128_384_ROUNDS_AFTER, 2
     );
     forkskinny_128_384_encrypt_with_tks(Sonic->fs_tks1, Sonic->fs_tks2, Sonic->fs_tks3, 0, buffer, Sonic->P);
+    cnt_384_1leg++;
 
     arrXOR(Chains->m, buffer, SONICS_384_N_SIZE);
     arrDOUBLE_128(Chains->m);
@@ -248,6 +274,7 @@ void supersonic_384_star(const uint8_t key[16],
         Sonic.fs_tks1, Sonic.fs_tks2, Sonic.fs_tks3,
         Sonic.K_prime, Sonic.mask, Sonic.P
     );
+    cnt_384_2leg++;
 
     for (i = 0; i < numP; ++i) {
         memcpy(Sonic.P, message + (SONICS_384_P_SIZE - 1) * i, (SONICS_384_P_SIZE - 1));
@@ -279,6 +306,7 @@ void supersonic_384_star(const uint8_t key[16],
         Sonic.fs_tks1, Sonic.fs_tks2, Sonic.fs_tks3,
         out_left, out_right, Chains.m
     );
+    cnt_384_2leg++;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -321,6 +349,7 @@ void supersonic_256_star(const uint8_t key[16],
         Sonic.fs_tks1, Sonic.fs_tks2,
         Sonic.K_prime, Sonic.mask, Sonic.P
     );
+    cnt_256_2leg++;
 
     for (i = 0; i < numP; ++i) {
         memcpy(Sonic.P, message + (SONICS_256_P_SIZE - 1) * i, (SONICS_256_P_SIZE - 1));
@@ -348,6 +377,7 @@ void supersonic_256_star(const uint8_t key[16],
         Sonic.fs_tks1, Sonic.fs_tks2,
         out_left, out_right, Chains.m
     );
+    cnt_256_2leg++;
 }
 
 /* ------------------------------------------------------------------------- */

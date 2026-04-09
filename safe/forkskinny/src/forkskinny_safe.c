@@ -83,7 +83,7 @@ static void gf_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
 
 static size_t pad10_len(size_t len)
 {
-    return len + 1 + ((TWO_N - ((len + 1) % TWO_N)) % TWO_N);
+    return len + 1 + ((N - ((len + 1) % N)) % N);
 }
 
 static size_t pad10(uint8_t *out, const uint8_t *in, size_t len)
@@ -143,12 +143,6 @@ static void be128_rshift1(uint8_t x[16])
  *   bit 127 reserved for domain bit
  *   bits 126..0 hold the actual V
  */
-static void split_u_v_255(const uint8_t s[32], uint8_t U[16], uint8_t V[16])
-{
-    memcpy(U, s, 16);
-    memcpy(V, s + 16, 16);
-    be128_rshift1(V);
-}
 
 /* Build tweak = b || V_rep and append key for ForkSkinny-128-256. */
 static void make_tk(uint8_t tk[32],
@@ -160,6 +154,14 @@ static void make_tk(uint8_t tk[32],
     tk[0] &= 0x7FU;
     tk[0] |= (uint8_t)((domain_bit & 1U) << 7);
     memcpy(tk + 16, key, KEY_LEN);
+}
+
+/* F_K^{b||V}(U) -> 32-byte output = left || right */
+static void split_u_v_255(const uint8_t s[32], uint8_t U[16], uint8_t V[16])
+{
+    memcpy(U, s, 16);
+    memcpy(V, s + 16, 16);
+    be128_rshift1(V);
 }
 
 /* F_K^{b||V}(U) -> 32-byte output = left || right */
@@ -241,10 +243,26 @@ int sfmac(const uint8_t key[KEY_LEN],
     /* L <- [F_K^(0^(t+1))(0^n)]_(2n) */
     tprf_eval_32(key, 0, zeroV, zeroU, L);
 
-    /* T <- (T xor X[i]) ⊗ L for each 32-byte block */
-    for (size_t i = 0; i < x_len; i += TWO_N) {
+    /* Process X in 16-byte chunks by buffering two into a 32-byte block */
+    uint8_t block[TWO_N];
+    size_t block_off = 0;
+    for (size_t i = 0; i < x_len; i += N) {
+        memcpy(block + block_off, X + i, N);
+        block_off += N;
+        if (block_off == TWO_N) {
+            for (size_t j = 0; j < TWO_N; ++j) {
+                tmp[j] = (uint8_t)(T[j] ^ block[j]);
+            }
+            gf_mul(T, tmp, L);
+            block_off = 0;
+        }
+    }
+
+    /* Handle any leftover (shouldn't happen with current padding, but be safe) */
+    if (block_off) {
+        memset(block + block_off, 0, TWO_N - block_off);
         for (size_t j = 0; j < TWO_N; ++j) {
-            tmp[j] = (uint8_t)(T[j] ^ X[i + j]);
+            tmp[j] = (uint8_t)(T[j] ^ block[j]);
         }
         gf_mul(T, tmp, L);
     }
@@ -267,6 +285,8 @@ int sfmac(const uint8_t key[KEY_LEN],
 
     return 0;
 }
+
+/* sfmac16 removed (full 16-byte design implemented in sfmac) */
 
 /* ------------------------------------------------------------------------- */
 /* public API                                                                */
