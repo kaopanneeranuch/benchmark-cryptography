@@ -11,7 +11,7 @@
 /* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
 #define BENCH_ITERS   100
-#define MESSAGE_LEN   100
+#define MESSAGE_LEN   4096
 #define AD_LEN         0
 
 /* work buffers */

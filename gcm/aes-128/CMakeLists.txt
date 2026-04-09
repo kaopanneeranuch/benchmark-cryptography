@@ -9,6 +9,7 @@ target_sources(app PRIVATE
 	src/gf.c
 	src/ghash.c
 	src/aesgcm.c
+	src/aes_sw.c
     src/bench.c
 )
 

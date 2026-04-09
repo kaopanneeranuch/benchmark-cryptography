@@ -1,6 +1,6 @@
 #include "aesgcm.h"
 #include "ghash.h"
-#include <mbedtls/aes.h>
+#include "aes_sw.h"
 #include <string.h>
 
 
@@ -17,10 +17,7 @@ static int ct_memcmp(const uint8_t *a, const uint8_t *b, size_t n)
 
 void aes_encrypt_block(const uint8_t key[16], const uint8_t in[16], uint8_t out[16])
 {
-    mbedtls_aes_context ctx; mbedtls_aes_init(&ctx);
-    mbedtls_aes_setkey_enc(&ctx, key, 128);
-    mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, in, out);
-    mbedtls_aes_free(&ctx);
+    aes_sw_encrypt_128(key, in, out);
 }
 
 void aes_ctr_encrypt(const uint8_t key[16], const uint8_t nonce[12], const uint8_t *pt, size_t len, uint8_t *ct)
