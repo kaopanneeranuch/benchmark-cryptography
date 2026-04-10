@@ -88,32 +88,6 @@ void verify_correctness(void)
 
 /* ── individual benchmarks ─────────────────────────────── */
 
-static void bench_keygen(void)
-{
-    timing_t start, end;
-    uint64_t total_c = 0;
-    uint64_t total_ns = 0;
-
-    /* initialize key schedule */
-    memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
-
-    for (int i = 0; i < BENCH_ITERS; ++i) {
-        start = timing_counter_get();
-        memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
-        end = timing_counter_get();
-
-        bench_sink8 ^= ks.key[0];
-
-        {
-            uint64_t c = timing_cycles_get(&start, &end);
-            total_c += c;
-            total_ns += timing_cycles_to_ns(c);
-        }
-    }
-
-    /* keygen benchmark removed */
-}
-
 static void bench_auth(void)
 {
     timing_t start, end;

@@ -6,24 +6,7 @@
 #include "include/sonics_ref.h"
 #include "skinny.h"
 
-/*
- * Butterknife / Deoxys-BC hybrid for SuperSonic-256.
- *
- * Both versions keep:
- *   - 2-leg precompute    -> Butterknife
- *   - 2-leg finalization  -> Butterknife
- *
- * They differ only in the 1-leg absorb round:
- *
- *   exact:
- *     full-round Deoxys-BC-256 style block call
- *
- *   star:
- *     reduced-round Deoxys-BC-256 style block call
- *
- */
-
-#define SUPERSONIC_STAR_BK256_ROUNDS 48u
+#define SUPERSONIC_STAR_BK256_ROUNDS 32u
 
 /* Call counters */
 static uint32_t cnt_1leg;

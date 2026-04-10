@@ -6,10 +6,11 @@ project(supersonic)
 zephyr_include_directories(
     ../BC__Butterknife/include
     ../forkskinny-opt32
+    ../deoxysi256/deoxysi256/ref
     src
 )
 
-target_sources(app PRIVATE 
+target_sources(app PRIVATE
     src/main.c
     src/supersonic-star_butterknife_skinny.c
     src/supersonic-star_butterknife.c
@@ -18,4 +19,5 @@ target_sources(app PRIVATE
     ../BC__Butterknife/source/butterknife256.c
     ../forkskinny-opt32/internal-forkskinny.c
     ../forkskinny-opt32/skinny.c
+    ../deoxysi256/deoxysi256/ref/tweakableBC.c
 )

@@ -4,27 +4,7 @@
 
 #include "include/butterknife.h"
 #include "include/sonics_ref.h"
-#include "skinny.h"
-
-/*
- * Butterknife / Deoxys-BC hybrid for SuperSonic-256.
- *
- * Both versions keep:
- *   - 2-leg precompute    -> Butterknife
- *   - 2-leg finalization  -> Butterknife
- *
- * They differ only in the 1-leg absorb round:
- *
- *   exact:
- *     full-round Deoxys-BC-256 style block call
- *
- *   star:
- *     reduced-round Deoxys-BC-256 style block call
- *
- */
-
-#define SUPERSONIC_STAR_BK256_ROUNDS 32u
-#define SUPERSONIC_STAR_DEOXYS_ROUNDS 14u
+#include "tweakableBC.h"
 
 /* Call counters */
 static uint32_t cnt_1leg;
@@ -62,32 +42,14 @@ static void arrDOUBLE_128(uint8_t out[16])
 }
 
 /* ------------------------------------------------------------------------- */
-/* Deoxys-BC-256 style one-leg helpers                                       */
+/* Deoxys-BC-256 one-leg helper (official ref, no volatile S-box)           */
 /* ------------------------------------------------------------------------- */
 
-/*
- * EXACT helper: full 14-round Deoxys-BC-256.
- */
-static void deoxysBC_256_encrypt_exact(const uint8_t tk[32],
-                                       uint32_t *rtk,
-                                       uint8_t out[16],
-                                       const uint8_t in[16])
-{
-    butterknife_256_precompute_rtk(tk, rtk, 0);
-    deoxysBC_256_encrypt_w_rtk(rtk, out, in);
-    cnt_1leg++;
-}
-
-/*
- * STAR helper: reduced SUPERSONIC_STAR_DEOXYS_ROUNDS-round Deoxys-BC-256.
- */
-static void deoxysBC_256_encrypt_star(const uint8_t tk[32],
-                                      uint32_t *rtk,
+static void deoxysBC_256_encrypt_1leg(const uint8_t tk[32],
                                       uint8_t out[16],
                                       const uint8_t in[16])
 {
-    deoxysBC_256_precompute_rtk_star(tk, rtk, SUPERSONIC_STAR_DEOXYS_ROUNDS);
-    deoxysBC_256_encrypt_star_w_rtk(rtk, out, in, SUPERSONIC_STAR_DEOXYS_ROUNDS);
+    aesTweakEncrypt(256, in, tk, out);
     cnt_1leg++;
 }
 
@@ -98,8 +60,7 @@ static void deoxysBC_256_encrypt_star(const uint8_t tk[32],
 static void supersonic_256_round_core(Sonics_256_struct_t *Sonic,
                                       SonicChains *Chains,
                                       uint8_t buffer[SONICS_256_N_SIZE],
-                                      uint16_t Nr,
-                                      int use_star)
+                                      uint16_t Nr)
 {
     uint8_t tk[32];
 
@@ -113,10 +74,7 @@ static void supersonic_256_round_core(Sonics_256_struct_t *Sonic,
     memcpy(tk,      Sonic->P + SONICS_256_N_SIZE,                     16);
     memcpy(tk + 16, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, 16);
 
-    if (use_star)
-        deoxysBC_256_encrypt_star(tk, Sonic->bk_rtk, buffer, Sonic->P);
-    else
-        deoxysBC_256_encrypt_exact(tk, Sonic->bk_rtk, buffer, Sonic->P);
+    deoxysBC_256_encrypt_1leg(tk, buffer, Sonic->P);
 
     arrXOR(Chains->m, buffer, SONICS_256_N_SIZE);
     arrDOUBLE_128(Chains->m);
@@ -133,8 +91,7 @@ static void supersonic_256_butterknife_core(
     uint8_t out_left[16],
     uint8_t out_right[16],
     const uint8_t *message,
-    const uint32_t mlen,
-    int use_star)
+    const uint32_t mlen)
 {
     uint8_t res;
     uint16_t i, numP;
@@ -174,7 +131,7 @@ static void supersonic_256_butterknife_core(
          */
         memcpy(Sonic.P, message + (SONICS_256_P_SIZE - 1) * i, (SONICS_256_P_SIZE - 1));
 
-        supersonic_256_round_core(&Sonic, &Chains, buffer, i, use_star);
+        supersonic_256_round_core(&Sonic, &Chains, buffer, i);
     }
 
     /* Padding */
@@ -184,7 +141,7 @@ static void supersonic_256_butterknife_core(
            message + numP * (SONICS_256_P_SIZE - 1),
            (SONICS_256_P_SIZE - 1) * (res == 0) + res);
 
-    supersonic_256_round_core(&Sonic, &Chains, buffer, numP, use_star);
+    supersonic_256_round_core(&Sonic, &Chains, buffer, numP);
 
     /* Final 2-leg call stays Butterknife */
     Chains.kt[SONICS_256_K_SIZE + SONICS_256_T_SIZE] = 0b01 + (0b10 * (res > 0));
@@ -209,5 +166,5 @@ void supersonic_256_butterknife_deoxys(const uint8_t key[16],
                                        const uint8_t *message,
                                        const uint32_t mlen)
 {
-    supersonic_256_butterknife_core(key, out_left, out_right, message, mlen, 1);
+    supersonic_256_butterknife_core(key, out_left, out_right, message, mlen);
 }
