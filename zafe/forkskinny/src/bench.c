@@ -6,6 +6,7 @@
 
 #include "forkskinny_zafe.h"
 #include "bench.h"
+#include "internal-forkskinny.h"
 
 /* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
@@ -122,6 +123,19 @@ static void bench_hash(void)
                                    tag_buf);
     }
 
+    /* probe: one un-timed call to count primitive invocations */
+    forkskinny_counters_reset();
+    (void)forkskinny_zafe_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        (void)forkskinny_zafe_auth(&ks,
+                                   ad_buf, AD_LEN,
+                                   pt_buf, MESSAGE_LEN,
+                                   tag_buf);
+    }
+
     for (int i = 0; i < BENCH_ITERS; i++) {
         start = timing_counter_get();
         (void)forkskinny_zafe_auth(&ks,
@@ -140,6 +154,8 @@ static void bench_hash(void)
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "hash (tag)",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 static void bench_encrypt(void)
@@ -156,6 +172,16 @@ static void bench_encrypt(void)
                                ad_buf, AD_LEN,
                                pt_buf, MESSAGE_LEN,
                                tag_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_counters_reset();
+        forkskinny_zafe_encrypt(&ks, tag_local, pt_buf, MESSAGE_LEN, ct_buf);
+    }
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         uint8_t tag_local[ZAFE_TAG_LEN];
@@ -181,6 +207,8 @@ static void bench_encrypt(void)
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "encrypt",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 static void bench_decrypt(void)
@@ -197,6 +225,16 @@ static void bench_decrypt(void)
                                        ad_buf, AD_LEN,
                                        pt_buf, MESSAGE_LEN,
                                        ct_buf, tag_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_counters_reset();
+        forkskinny_zafe_decrypt(&ks, tag_local, ct_buf, MESSAGE_LEN, dec_buf);
+    }
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         uint8_t tag_local[ZAFE_TAG_LEN];
@@ -222,6 +260,8 @@ static void bench_decrypt(void)
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "decrypt",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 static void bench_verify(void)
@@ -238,6 +278,12 @@ static void bench_verify(void)
                                ad_buf, AD_LEN,
                                pt_buf, MESSAGE_LEN,
                                tag_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    forkskinny_counters_reset();
+    (void)forkskinny_zafe_verify(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         (void)forkskinny_zafe_verify(&ks,
@@ -264,6 +310,8 @@ static void bench_verify(void)
     printk("  %-14s: %10llu cycles  |  %10llu ns\n", "verify",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 /* ── top-level entry ───────────────────────────────────── */

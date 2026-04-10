@@ -25,6 +25,20 @@
 #include "internal-util.h"
 #include <string.h>
 
+/* ── primitive call counters ─────────────────────────────── */
+uint32_t g_skinny128_256_enc_calls = 0;
+uint32_t g_skinny128_256_dec_calls = 0;
+uint32_t g_skinny128_384_enc_calls = 0;
+uint32_t g_skinny128_384_dec_calls = 0;
+
+void skinny_counters_reset(void)
+{
+    g_skinny128_256_enc_calls = 0;
+    g_skinny128_256_dec_calls = 0;
+    g_skinny128_384_enc_calls = 0;
+    g_skinny128_384_dec_calls = 0;
+}
+
 #if !defined(__AVR__)
 
 STATIC_INLINE void skinny128_fast_forward_tk(uint32_t *tk)
@@ -222,6 +236,7 @@ void skinny_128_384_encrypt
     (const skinny_128_384_key_schedule_t *ks, unsigned char *output,
      const unsigned char *input)
 {
+    ++g_skinny128_384_enc_calls;
     uint32_t s0, s1, s2, s3;
     uint32_t TK1[4];
 #if SKINNY_128_SMALL_SCHEDULE
@@ -553,6 +568,7 @@ void skinny_128_384_encrypt_tk_full
     (const unsigned char key[48], unsigned char *output,
      const unsigned char *input)
 {
+    ++g_skinny128_384_enc_calls;
     uint32_t s0, s1, s2, s3;
     uint32_t TK1[4];
     uint32_t TK2[4];
@@ -716,6 +732,7 @@ void skinny_128_256_encrypt
     (const skinny_128_256_key_schedule_t *ks, unsigned char *output,
      const unsigned char *input)
 {
+    ++g_skinny128_256_enc_calls;
     uint32_t s0, s1, s2, s3;
     uint32_t TK1[4];
 #if SKINNY_128_SMALL_SCHEDULE
@@ -892,6 +909,7 @@ void skinny_128_256_encrypt_tk_full
     (const unsigned char key[32], unsigned char *output,
      const unsigned char *input)
 {
+    ++g_skinny128_256_enc_calls;
     uint32_t s0, s1, s2, s3;
     uint32_t TK1[4];
     uint32_t TK2[4];

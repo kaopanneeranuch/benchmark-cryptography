@@ -7,6 +7,7 @@
 
 #include "forkskinny_sonicae.h"
 #include "bench.h"
+#include "internal-forkskinny.h"
 
 /* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
@@ -97,6 +98,12 @@ static void bench_auth(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
+    /* probe: one un-timed call to count primitive invocations */
+    forkskinny_counters_reset();
+    forkskinny_sonicae_auth(&ks, NULL, 0, pt_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
+
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         forkskinny_sonicae_auth(&ks, NULL, 0,
                                 pt_buf, MESSAGE_LEN, tag_buf);
@@ -122,6 +129,8 @@ static void bench_auth(void)
            "auth (tag)",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 static void bench_encrypt(void)
@@ -135,6 +144,12 @@ static void bench_encrypt(void)
 
     /* precompute tag outside timing */
     forkskinny_sonicae_auth(&ks, NULL, 0, pt_buf, MESSAGE_LEN, tag_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    forkskinny_counters_reset();
+    forkskinny_sonicae_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         forkskinny_sonicae_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
@@ -159,6 +174,8 @@ static void bench_encrypt(void)
            "encrypt",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 static void bench_decrypt(void)
@@ -171,6 +188,12 @@ static void bench_decrypt(void)
     memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
     forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    forkskinny_counters_reset();
+    forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
@@ -195,6 +218,8 @@ static void bench_decrypt(void)
            "decrypt",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
 static void bench_auth_check(void)
@@ -209,6 +234,12 @@ static void bench_auth_check(void)
     forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
     forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    forkskinny_counters_reset();
+    (void)forkskinny_sonicae_verify(&ks, NULL, 0, dec_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         rc ^= forkskinny_sonicae_verify(&ks, NULL, 0,
@@ -234,6 +265,8 @@ static void bench_auth_check(void)
            "auth-check",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 
     k_msleep(1);
 }

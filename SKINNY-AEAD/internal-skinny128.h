@@ -38,6 +38,13 @@
 extern "C" {
 #endif
 
+/* ── primitive call counters (reset with skinny_counters_reset()) ── */
+extern uint32_t g_skinny128_256_enc_calls;
+extern uint32_t g_skinny128_256_dec_calls;
+extern uint32_t g_skinny128_384_enc_calls;
+extern uint32_t g_skinny128_384_dec_calls;
+void skinny_counters_reset(void);
+
 /**
  * \def SKINNY_128_SMALL_SCHEDULE
  * \brief Defined to 1 to use the small key schedule version of SKINNY-128.

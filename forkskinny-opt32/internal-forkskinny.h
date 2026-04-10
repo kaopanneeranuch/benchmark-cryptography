@@ -40,6 +40,15 @@
 extern "C" {
 #endif
 
+/* ── primitive call counters (reset with forkskinny_counters_reset()) ── */
+extern uint32_t g_fs128_256_enc_calls;
+extern uint32_t g_fs128_256_dec_calls;
+extern uint32_t g_fs128_384_enc_calls;
+extern uint32_t g_fs128_384_dec_calls;
+extern uint32_t g_fs64_192_enc_calls;
+extern uint32_t g_fs64_192_dec_calls;
+void forkskinny_counters_reset(void);
+
 /**
  * \brief Number of rounds of ForkSkinny-128-256 before forking.
  */

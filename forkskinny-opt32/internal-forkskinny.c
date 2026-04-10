@@ -25,6 +25,24 @@
 
 #include <stddef.h>
 
+/* ── primitive call counters ─────────────────────────────── */
+uint32_t g_fs128_256_enc_calls = 0;
+uint32_t g_fs128_256_dec_calls = 0;
+uint32_t g_fs128_384_enc_calls = 0;
+uint32_t g_fs128_384_dec_calls = 0;
+uint32_t g_fs64_192_enc_calls  = 0;
+uint32_t g_fs64_192_dec_calls  = 0;
+
+void forkskinny_counters_reset(void)
+{
+    g_fs128_256_enc_calls = 0;
+    g_fs128_256_dec_calls = 0;
+    g_fs128_384_enc_calls = 0;
+    g_fs128_384_dec_calls = 0;
+    g_fs64_192_enc_calls  = 0;
+    g_fs64_192_dec_calls  = 0;
+}
+
 void forkskinny_64_192_encrypt_with_single_tks
     (const forkskinny_64_192_tweakey_schedule_t *tks1, unsigned char *output_left, unsigned char *output_right, const unsigned char *input);
 void forkskinny_64_192_rounds_single_tks
@@ -605,6 +623,7 @@ void forkskinny_128_256_encrypt_with_tks
         unsigned char *output_left, unsigned char *output_right,
         const unsigned char *input)
 {
+    ++g_fs128_256_enc_calls;
     forkskinny_128_256_state_t state;
 
     /* Unpack the input */
@@ -690,6 +709,7 @@ void forkskinny_128_256_decrypt_with_tks
        unsigned char *output_left, unsigned char *output_right,
        const unsigned char *input_right)
 {
+    ++g_fs128_256_dec_calls;
     forkskinny_128_256_state_t state;
     forkskinny_128_256_state_t fstate;
 
@@ -759,6 +779,7 @@ void forkskinny_128_384_encrypt_with_tks
     (const forkskinny_128_384_tweakey_schedule_t *tks1, const forkskinny_128_384_tweakey_schedule_t *tks2, const forkskinny_128_384_tweakey_schedule_t *tks3,
       unsigned char *output_left, unsigned char *output_right, const unsigned char *input)
 {
+    ++g_fs128_384_enc_calls;
     forkskinny_128_384_state_t state;
 
     /* Unpack the input */
@@ -844,6 +865,7 @@ void forkskinny_128_384_decrypt_with_tks
     (const forkskinny_128_384_tweakey_schedule_t *tks1, const forkskinny_128_384_tweakey_schedule_t *tks2, const forkskinny_128_384_tweakey_schedule_t *tks3,
       unsigned char *output_left, unsigned char *output_right, const unsigned char *input_right)
 {
+    ++g_fs128_384_dec_calls;
     forkskinny_128_384_state_t state;
     forkskinny_128_384_state_t fstate;
 
@@ -913,6 +935,7 @@ void forkskinny_64_192_encrypt_with_tks
     (const forkskinny_64_192_tweakey_schedule_t *tks1, const forkskinny_64_192_tweakey_schedule_t *tks2,
       unsigned char *output_left, unsigned char *output_right, const unsigned char *input)
 {
+    ++g_fs64_192_enc_calls;
     forkskinny_64_192_state_t state;
 
     /* Unpack the input */
@@ -996,6 +1019,7 @@ void forkskinny_64_192_decrypt_with_tks
     (const forkskinny_64_192_tweakey_schedule_t *tks1, const forkskinny_64_192_tweakey_schedule_t *tks2,
       unsigned char *output_left, unsigned char *output_right, const unsigned char *input_right)
 {
+    ++g_fs64_192_dec_calls;
     forkskinny_64_192_state_t state;
     forkskinny_64_192_state_t fstate;
 
