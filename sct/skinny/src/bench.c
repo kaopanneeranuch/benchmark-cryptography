@@ -275,6 +275,9 @@ void bench_sct_all(void)
 {
     printk("[SKINNY SCT] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=%d  tag=%d  pt=%d  ct=%d  ad=%d  (bytes)\n",
+           SCT_KEY_LEN, SCT_NONCE_LEN, SCT_TAG_LEN,
+           MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
     bench_hash();

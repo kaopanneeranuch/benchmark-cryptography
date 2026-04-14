@@ -3,6 +3,7 @@
 #include <zephyr/timing/timing.h>
 #include <string.h>
 #include <stdint.h>
+#include <psa/crypto.h>
 #include "aesgcm.h"
 #include "bench.h"
 #include "ghash.h"
@@ -103,6 +104,11 @@ static void bench_hash(void)
     fill_pattern(ad_buf, AD_LEN);
 #endif
 
+    /* probe: one un-timed call to count primitive invocations */
+    aes_counters_reset();
+    aes_256_gcm_auth(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_aes_enc_calls;
+
     /* measure auth (tag-only) */
     for (int i = 0; i < WARMUP_ITERS; i++)
         aes_256_gcm_auth(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
@@ -126,6 +132,11 @@ static void bench_encrypt(void)
     uint64_t total_c = 0, total_ns = 0;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
+    /* probe: one un-timed call to count primitive invocations */
+    aes_counters_reset();
+    aes_256_gcm_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+    uint32_t enc_per_op = g_aes_enc_calls;
+
     /* CTR-mode encryption (no tag) */
     for (int i = 0; i < WARMUP_ITERS; i++)
         aes_256_gcm_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
@@ -151,6 +162,11 @@ static void bench_decrypt(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     /* produce ciphertext */
     aes_256_gcm_encrypt(bench_key, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+
+    /* probe: one un-timed call to count primitive invocations */
+    aes_counters_reset();
+    aes_256_gcm_decrypt(bench_key, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
+    uint32_t enc_per_op = g_aes_enc_calls;
 
     for (int i = 0; i < WARMUP_ITERS; i++)
         aes_256_gcm_decrypt(bench_key, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
@@ -180,6 +196,11 @@ static void bench_verify(void)
                        pt_buf, MESSAGE_LEN,
                        ct_buf, tag_buf);
 
+    /* probe: one un-timed call to count primitive invocations */
+    aes_counters_reset();
+    (void)aes_256_gcm_verify(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_aes_enc_calls;
+
     for (int i = 0; i < WARMUP_ITERS; i++)
         (void)aes_256_gcm_verify(bench_key, bench_nonce, 12, ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
 
@@ -196,17 +217,113 @@ static void bench_verify(void)
            (unsigned long long)(total_ns / BENCH_ITERS));
 }
 
+/* ── PSA Crypto library benchmarks ─────────────────────────── */
+
+static psa_key_id_t s_lib_key;
+
+static bool lib_key_init(void)
+{
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attr, PSA_KEY_TYPE_AES);
+    psa_set_key_bits(&attr, 256);
+    psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_ENCRYPT | PSA_KEY_USAGE_DECRYPT);
+    psa_set_key_algorithm(&attr, PSA_ALG_GCM);
+    psa_status_t st = psa_import_key(&attr, bench_key, 32, &s_lib_key);
+    if (st != PSA_SUCCESS) {
+        printk("  lib: psa_import_key failed (%d)\n", (int)st);
+        return false;
+    }
+    return true;
+}
+
+/* one-shot: psa_aead_encrypt (CTR encrypt + GHASH + tag) */
+static void bench_lib_combined(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+    static uint8_t output[MESSAGE_LEN + 16];
+    size_t output_len;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        psa_aead_encrypt(s_lib_key, PSA_ALG_GCM, bench_nonce, 12,
+                          ad_buf, AD_LEN, pt_buf, MESSAGE_LEN,
+                          output, sizeof(output), &output_len);
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        start = timing_counter_get();
+        psa_aead_encrypt(s_lib_key, PSA_ALG_GCM, bench_nonce, 12,
+                          ad_buf, AD_LEN, pt_buf, MESSAGE_LEN,
+                          output, sizeof(output), &output_len);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "lib combined",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+}
+
+/* one-shot decrypt to pair with encrypt */
+static void bench_lib_decrypt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+    static uint8_t enc_output[MESSAGE_LEN + 16];
+    static uint8_t dec_output[MESSAGE_LEN];
+    size_t out_len;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    /* produce valid ciphertext+tag first */
+    size_t enc_len;
+    psa_aead_encrypt(s_lib_key, PSA_ALG_GCM, bench_nonce, 12,
+                      ad_buf, AD_LEN, pt_buf, MESSAGE_LEN,
+                      enc_output, sizeof(enc_output), &enc_len);
+
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        psa_aead_decrypt(s_lib_key, PSA_ALG_GCM, bench_nonce, 12,
+                          ad_buf, AD_LEN, enc_output, enc_len,
+                          dec_output, sizeof(dec_output), &out_len);
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        start = timing_counter_get();
+        psa_aead_decrypt(s_lib_key, PSA_ALG_GCM, bench_nonce, 12,
+                          ad_buf, AD_LEN, enc_output, enc_len,
+                          dec_output, sizeof(dec_output), &out_len);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "lib decrypt",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+}
+
 /* ── top-level entry ───────────────────────────────────── */
 void bench_gcm_all(void)
 {
     printk("[AES-256 GCM] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=%d  tag=%d  pt=%d  ct=%d  ad=%d  (bytes)\n",
+           (int)sizeof(bench_key), (int)sizeof(bench_nonce), 16,
+           MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
+    printk("\n[Our implementation]\n");
     bench_hash();
     bench_encrypt();
     bench_decrypt();
     bench_verify();
 
-    printk("--- Benchmark complete ---\n\n");
+    printk("\n[PSA Crypto library (AES-256-GCM)]\n");
+    if (lib_key_init()) {
+        bench_lib_combined();
+        bench_lib_decrypt();
+        psa_destroy_key(s_lib_key);
+    }
+
+    printk("\n--- Benchmark complete ---\n\n");
 }

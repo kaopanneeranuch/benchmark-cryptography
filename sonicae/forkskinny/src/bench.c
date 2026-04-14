@@ -276,6 +276,8 @@ void bench_sonicae_all(void)
 {
     printk("[FORKSKINNY SONICAE] Benchmark  msg=%d bytes  iters=%d\n",
            MESSAGE_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=none  tag=%d  pt=%d  ct=%d  ad=none  (bytes)\n",
+           SONICAE_KEY_LEN, SS_TAG_BYTES, MESSAGE_LEN, MESSAGE_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
     /* keygen bench removed */

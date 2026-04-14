@@ -304,6 +304,8 @@ void bench_safe_all(void)
 {
     printk("[FORKSKINNY SAFE] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=none  tag=%d  pt=%d  ct=%d  ad=%d  (bytes)\n",
+           SAFE_KEY_LEN, SAFE_TAG_LEN, MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
     verify_correctness();

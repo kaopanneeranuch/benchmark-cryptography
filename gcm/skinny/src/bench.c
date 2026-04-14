@@ -222,6 +222,9 @@ void bench_gcm_all(void)
 {
     printk("[SKINNY GCM] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=%d  tag=%d  pt=%d  ct=%d  ad=%d  (bytes)\n",
+           (int)sizeof(bench_key), (int)sizeof(bench_nonce), 16,
+           MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
     bench_hash();

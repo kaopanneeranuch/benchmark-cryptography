@@ -322,6 +322,8 @@ void bench_zafe_all(void)
 
     printk("[FORKSKINNY ZAFE] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=none  tag=%d  pt=%d  ct=%d  ad=%d  (bytes)\n",
+           ZAFE_KEY_LEN, ZAFE_TAG_LEN, MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
     verify_correctness();
