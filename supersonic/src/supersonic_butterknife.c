@@ -6,6 +6,21 @@
 #include "internal-forkskinny.h"
 #include "include/supersonic.h"
 
+/* ── call counters ─────────────────────────────────────────── */
+static uint32_t cnt_1leg;  /* DeoxysBC 1-leg calls  */
+static uint32_t cnt_2leg;  /* Butterknife 2-leg calls */
+
+void supersonic_bk_reset_counters(void)
+{
+    cnt_1leg = cnt_2leg = 0;
+}
+
+void supersonic_bk_get_counters(uint32_t *oneleg, uint32_t *twoleg)
+{
+    *oneleg = cnt_1leg;
+    *twoleg = cnt_2leg;
+}
+
 static void arrXOR(uint8_t *out, const uint8_t *right, uint16_t len){
     for(uint8_t i = 0; i<len; ++i){
         out[i] ^= right[i];
@@ -34,7 +49,8 @@ static void supersonic_256_round(Sonics_256_struct_t *Sonic, SonicChains *Chains
     Sonic->P[SONICS_256_P_SIZE    ] = (uint8_t)(((Nr+1)&0x0f00)>>4);
     butterknife_256_precompute_rtk(Sonic->P + SONICS_256_N_SIZE, Sonic->bk_rtk, 0);
     deoxysBC_256_encrypt_w_rtk(Sonic->bk_rtk, buffer, Sonic->P);
-    
+    cnt_1leg++;
+
     arrXOR(Chains->m,  buffer, SONICS_256_N_SIZE); //m-Chain
     arrDOUBLE_128(Chains->m);
     arrXOR(buffer, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, SONICS_256_T_SIZE); //t-Chain
@@ -66,6 +82,7 @@ void supersonic_256_butterknife(const uint8_t key[16],
     memcpy(Sonic.P, key, SONICS_256_K_SIZE);
     butterknife_256_precompute_rtk(Sonic.P, Sonic.bk_rtk, 2);
     butterknife_256_encrypt_w_rtk(Sonic.bk_rtk, Kmask, Sonic.P + SONICS_256_K_SIZE, 2);
+    cnt_2leg++;
 
     for(i=0; i<numP; ++i){            
         /** 
@@ -89,6 +106,7 @@ void supersonic_256_butterknife(const uint8_t key[16],
     arrXOR(Chains.m,  Sonic.mask, SONICS_256_N_SIZE);
     butterknife_256_precompute_rtk(Chains.kt, Sonic.bk_rtk, 2);
     butterknife_256_encrypt_w_rtk(Sonic.bk_rtk, buffer, Chains.m, 2);
+    cnt_2leg++;
 
     memcpy(out_left, buffer, SONICS_256_N_SIZE);
     memcpy(out_right, buffer + SONICS_256_N_SIZE, SONICS_256_N_SIZE);

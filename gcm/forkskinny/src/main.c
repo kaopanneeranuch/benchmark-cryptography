@@ -10,7 +10,6 @@ void main(void)
 
     printk("\n=== ForkSkinny-GCM AEAD Benchmark ===\n\n");
 
-    verify_correctness();
     bench_gcm_all();
 
     timing_stop();

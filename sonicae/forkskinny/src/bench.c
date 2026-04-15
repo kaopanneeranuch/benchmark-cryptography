@@ -280,6 +280,8 @@ void bench_sonicae_all(void)
            SONICAE_KEY_LEN, SS_TAG_BYTES, MESSAGE_LEN, MESSAGE_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
+    verify_correctness();
+
     /* keygen bench removed */
     bench_auth();
     bench_encrypt();

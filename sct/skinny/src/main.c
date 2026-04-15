@@ -10,7 +10,6 @@ void main(void)
 
     printk("\n=== Skinny-SCT AEAD Benchmark ===\n\n");
 
-    verify_correctness();
     bench_sct_all();
 
     timing_stop();

@@ -15,7 +15,7 @@
  *
  */
 
-#define SUPERSONIC_STAR_256_ROUNDS 32u
+#define SUPERSONIC_STAR_256_ROUNDS 48u
 #define SUPERSONIC_STAR_192_ROUNDS 40u
 
 /* Call counters (reset via supersonic_fs_star_reset_counters) */

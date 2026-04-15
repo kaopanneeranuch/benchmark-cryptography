@@ -10,7 +10,6 @@ int main(void)
 
     printk("\n=== ForkSkinny-Sonicae AEAD Benchmark ===\n\n");
 
-    verify_correctness();
     bench_sonicae_all();
 
     timing_stop();

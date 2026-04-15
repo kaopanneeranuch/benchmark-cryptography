@@ -75,10 +75,15 @@ static void bench_supersonic_star_variant(const char *name, supersonic_fn_t fn, 
 
 #define TOTAL_ITERS (WARMUP_ITERS + BENCH_ITERS)
 
-static void print_counters(uint32_t oneleg, uint32_t twoleg)
+static void print_counters(const char *name1, uint32_t c1,
+                           const char *name2, uint32_t c2)
 {
-    printk("    encrypt calls/MAC: 1-leg=%" PRIu32 "  2-leg=%" PRIu32 "\n",
-           oneleg / TOTAL_ITERS, twoleg / TOTAL_ITERS);
+    if (c2 > 0)
+        printk("    [prim/op] %s=%" PRIu32 "  %s=%" PRIu32 "\n",
+               name1, c1 / TOTAL_ITERS, name2, c2 / TOTAL_ITERS);
+    else
+        printk("    [prim/op] %s=%" PRIu32 "\n",
+               name1, c1 / TOTAL_ITERS);
 }
 
 static void bench_size(uint32_t mlen)
@@ -90,22 +95,22 @@ static void bench_size(uint32_t mlen)
     supersonic_fs_star_reset_counters();
     bench_supersonic_star_variant("supersonic_256_forkskinny", supersonic_256_star, mlen);
     supersonic_fs256_star_get_counters(&oneleg, &twoleg);
-    print_counters(oneleg, twoleg);
+    print_counters("skinny_r32", oneleg, "forkskinny_256", twoleg);
 
     supersonic_fs_star_reset_counters();
     bench_supersonic_star_variant("supersonic_384_forkskinny", supersonic_384_star, mlen);
     supersonic_fs384_star_get_counters(&oneleg, &twoleg);
-    print_counters(oneleg, twoleg);
+    print_counters("forkskinny_384_enc", oneleg, "forkskinny_384_fork", twoleg);
 
     supersonic_bk_deoxys_reset_counters();
     bench_supersonic_star_variant("supersonic_256_bk_deoxys", supersonic_256_butterknife_deoxys, mlen);
     supersonic_bk_deoxys_get_counters(&oneleg, &twoleg);
-    print_counters(oneleg, twoleg);
+    print_counters("deoxysBC", oneleg, "butterknife", twoleg);
 
     supersonic_bk_skinny_reset_counters();
     bench_supersonic_star_variant("supersonic_256_bk_skinny", supersonic_256_butterknife_skinny, mlen);
     supersonic_bk_skinny_get_counters(&oneleg, &twoleg);
-    print_counters(oneleg, twoleg);
+    print_counters("skinny_r32", oneleg, "butterknife", twoleg);
 }
 
 int main(void)

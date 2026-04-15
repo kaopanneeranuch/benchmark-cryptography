@@ -21,6 +21,10 @@
 	(x)[3] ^= (y)[3];				      \
 })
 
+/* Call counters */
+extern uint32_t g_butterknife_256_enc_calls;
+void butterknife_counters_reset(void);
+
 /* Tweakey Schedule */
 void butterknife_256_precompute_rtk(const uint8_t tweakey[32], uint32_t* rtk, const uint8_t num_branch);
 void deoxysBC_256_precompute_rtk_star(const uint8_t tweakey[32], uint32_t *rtk, uint8_t rounds);

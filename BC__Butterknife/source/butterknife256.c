@@ -2,6 +2,13 @@
 #include <string.h>
 #include "../include/butterknife.h"
 
+uint32_t g_butterknife_256_enc_calls = 0;
+
+void butterknife_counters_reset(void)
+{
+    g_butterknife_256_enc_calls = 0;
+}
+
 // The lookup-table is marked volatile to guarantee constant code execution time
 // The numbers below can be computed dynamically trading ROM for RAM
 volatile uint8_t sbox[256] = {
@@ -184,4 +191,5 @@ void butterknife_256_encrypt(const uint8_t tweakey[32], uint8_t* output, const u
 
   butterknife_256_precompute_rtk(tweakey, rtk, num_branches);
   butterknife_256_encrypt_w_rtk(rtk, output, message, num_branches);
+  ++g_butterknife_256_enc_calls;
 }

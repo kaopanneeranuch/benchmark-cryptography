@@ -227,6 +227,8 @@ void bench_gcm_all(void)
            MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
 
+    verify_correctness();
+
     bench_hash();
     bench_encrypt();
     bench_decrypt();

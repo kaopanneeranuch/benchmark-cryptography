@@ -10,7 +10,6 @@ int main(void)
 
     printk("\n=== ForkSkinny-SAFE AEAD Benchmark ===\n\n");
 
-    verify_correctness();
     bench_safe_all();
 
     timing_stop();

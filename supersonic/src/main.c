@@ -12,10 +12,12 @@
 #include "gctr-3-prime-bk.h"
 #include "include/sonics_ref.h"
 #include "include/supersonic.h"
+#include "butterknife.h"
 
-#define WARMUP_ITERS 10
+#define WARMUP_ITERS  10
 #define BENCH_ITERS  100
 #define MAX_MSG_LEN  4096
+#define TOTAL_ITERS  (WARMUP_ITERS + BENCH_ITERS)
 
 typedef void (*supersonic_fn_t)(const uint8_t key[16],
                                 uint8_t out_left[16],
@@ -58,6 +60,17 @@ static const uint8_t gctr_tag[32] = {
 };
 
 static volatile uint8_t sink;
+
+static void print_counters(const char *name1, uint32_t c1,
+                           const char *name2, uint32_t c2)
+{
+    if (c2 > 0)
+        printk("    [prim/op] %s=%" PRIu32 "  %s=%" PRIu32 "\n",
+               name1, c1 / TOTAL_ITERS, name2, c2 / TOTAL_ITERS);
+    else
+        printk("    [prim/op] %s=%" PRIu32 "\n",
+               name1, c1 / TOTAL_ITERS);
+}
 
 static void fill_pattern(uint8_t *buf, uint32_t len)
 {
@@ -109,97 +122,99 @@ static void bench_gctr_variants(uint32_t mlen)
 
     fill_pattern(msg_buf, mlen);
 
-    total_cycles = 0;
-    total_ns = 0;
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
+    /* gctr3_forkskinny */
+    total_cycles = 0; total_ns = 0;
+    forkskinny_counters_reset();
+    for (int i = 0; i < WARMUP_ITERS; ++i)
         gctr_3_forkskinny(bench_key, gctr_r, gctr_n, msg_buf, mlen, out_buf);
-    }
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         gctr_3_forkskinny(bench_key, gctr_r, gctr_n, msg_buf, mlen, out_buf);
         end = timing_counter_get();
-
         uint64_t cycles = timing_cycles_get(&start, &end);
         total_cycles += cycles;
         total_ns += timing_cycles_to_ns(cycles);
     }
     sink ^= out_buf[0];
     printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
-           "gctr3_forkskinny",
-           mlen,
-           total_cycles / BENCH_ITERS,
-           total_ns / BENCH_ITERS);
+           "gctr3_forkskinny", mlen,
+           total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
+    print_counters("fs_enc", g_fs128_256_enc_calls, "fs_dec", g_fs128_256_dec_calls);
 
-    total_cycles = 0;
-    total_ns = 0;
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
+    /* gctr3_butterknife */
+    total_cycles = 0; total_ns = 0;
+    butterknife_counters_reset();
+    for (int i = 0; i < WARMUP_ITERS; ++i)
         gctr_3_butterknife_iv_full(bench_key, gctr_iv, msg_buf, mlen, out_buf);
-    }
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         gctr_3_butterknife_iv_full(bench_key, gctr_iv, msg_buf, mlen, out_buf);
         end = timing_counter_get();
-
         uint64_t cycles = timing_cycles_get(&start, &end);
         total_cycles += cycles;
         total_ns += timing_cycles_to_ns(cycles);
     }
     sink ^= out_buf[0];
     printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
-           "gctr3_butterknife",
-           mlen,
-           total_cycles / BENCH_ITERS,
-           total_ns / BENCH_ITERS);
+           "gctr3_butterknife", mlen,
+           total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
+    print_counters("butterknife", g_butterknife_256_enc_calls, "", 0);
 
-    total_cycles = 0;
-    total_ns = 0;
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
+    /* gctr3_prime_forkskinny */
+    total_cycles = 0; total_ns = 0;
+    forkskinny_counters_reset();
+    for (int i = 0; i < WARMUP_ITERS; ++i)
         gctr_3_prime(bench_key, gctr_tag, msg_buf, mlen, out_buf);
-    }
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         gctr_3_prime(bench_key, gctr_tag, msg_buf, mlen, out_buf);
         end = timing_counter_get();
-
         uint64_t cycles = timing_cycles_get(&start, &end);
         total_cycles += cycles;
         total_ns += timing_cycles_to_ns(cycles);
     }
     sink ^= out_buf[0];
     printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
-           "gctr3_prime_forkskinny",
-           mlen,
-           total_cycles / BENCH_ITERS,
-           total_ns / BENCH_ITERS);
+           "gctr3_prime_forkskinny", mlen,
+           total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
+    print_counters("fs_enc", g_fs128_256_enc_calls, "fs_dec", g_fs128_256_dec_calls);
 
-    total_cycles = 0;
-    total_ns = 0;
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
+    /* gctr3_prime_butterknife */
+    total_cycles = 0; total_ns = 0;
+    butterknife_counters_reset();
+    for (int i = 0; i < WARMUP_ITERS; ++i)
         gctr_3_prime_butterknife(bench_key, gctr_tag, msg_buf, mlen, out_buf);
-    }
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         gctr_3_prime_butterknife(bench_key, gctr_tag, msg_buf, mlen, out_buf);
         end = timing_counter_get();
-
         uint64_t cycles = timing_cycles_get(&start, &end);
         total_cycles += cycles;
         total_ns += timing_cycles_to_ns(cycles);
     }
     sink ^= out_buf[0];
     printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
-           "gctr3_prime_butterknife",
-           mlen,
-           total_cycles / BENCH_ITERS,
-           total_ns / BENCH_ITERS);
+           "gctr3_prime_butterknife", mlen,
+           total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
+    print_counters("butterknife", g_butterknife_256_enc_calls, "", 0);
 }
 
 static void bench_size(uint32_t mlen)
 {
+    uint32_t c1leg, c2leg;
+
     printk("\n[Message size: %u bytes]\n", mlen);
+
+    supersonic_bk_reset_counters();
     bench_supersonic_variant("supersonic_256_butterknife", supersonic_256_butterknife, mlen);
-    // bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
-    // bench_gctr_variants(mlen);
+    supersonic_bk_get_counters(&c1leg, &c2leg);
+    print_counters("deoxysBC", c1leg, "butterknife", c2leg);
+
+    forkskinny_counters_reset();
+    bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
+    print_counters("fs_enc", g_fs128_256_enc_calls, "fs_dec", g_fs128_256_dec_calls);
+
+    bench_gctr_variants(mlen);
 }
 
 int main(void)
