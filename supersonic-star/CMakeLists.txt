@@ -19,5 +19,5 @@ target_sources(app PRIVATE
     ../BC__Butterknife/source/butterknife256.c
     ../forkskinny-opt32/internal-forkskinny.c
     ../forkskinny-opt32/skinny.c
-    ../deoxysi256/deoxysi256/ref/tweakableBC.c
+    ../deoxysi128/deoxysi128/ref/tweakableBC.c
 )
