@@ -6,7 +6,8 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/timing/timing.h>
 
-#include "aes-256_gcm.h"
+#include "aes_gcm.h"
+#include "rijndael_256_gcm.h"
 #include "bench.h"
 
 /* ── configuration ──────────────────────────────────────── */
@@ -20,6 +21,7 @@ static uint8_t pt_buf[MESSAGE_LEN];
 static uint8_t ct_buf[MESSAGE_LEN];
 static uint8_t dec_buf[MESSAGE_LEN];
 static uint8_t tag_buf[AES_GCM_TAG_LEN];
+static uint8_t tag_buf_r256[RIJNDAEL256_GCM_TAG_LEN];
 
 #if AD_LEN > 0
 static uint8_t ad_buf[AD_LEN];
@@ -42,6 +44,18 @@ static const uint8_t bench_key_256[AES256_KEY_LEN] = {
 static const uint8_t bench_nonce[AES_GCM_NONCE_LEN] = {
     0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,
     0xa8,0xa9,0xaa,0xab
+};
+
+static const uint8_t bench_key_rijndael256[RIJNDAEL256_KEY_LEN] = {
+    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
+    0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+    0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,
+    0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f
+};
+
+static const uint8_t bench_nonce_rijndael256[RIJNDAEL256_GCM_NONCE_LEN] = {
+    0xb0,0xb1,0xb2,0xb3,0xb4,0xb5,0xb6,0xb7,
+    0xb8,0xb9,0xba,0xbb
 };
 
 static void fill_pattern(uint8_t *buf, size_t len)
@@ -315,11 +329,40 @@ static void correctness_256(void)
     psa_destroy_key(key_id);
 }
 
+static void correctness_rijndael256(void)
+{
+    static const uint8_t test_pt[] = "Hello, Rijndael-256-GCM!";
+    uint8_t our_ct[sizeof(test_pt) - 1U];
+    uint8_t our_tag[RIJNDAEL256_GCM_TAG_LEN];
+    uint8_t our_dec[sizeof(test_pt)];
+    int rc;
+
+    printk("[Rijndael-256-GCM]\n");
+    printk("  PT: \"%s\"\n", test_pt);
+
+    rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                 NULL, 0,
+                                 test_pt, sizeof(test_pt) - 1U,
+                                 our_ct, our_tag);
+    rc = rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                        NULL, 0,
+                                        our_ct, sizeof(test_pt) - 1U,
+                                        our_tag, our_dec);
+    our_dec[sizeof(test_pt) - 1U] = '\0';
+
+    printk("  [Our implementation]\n");
+    print_hex("    CT:  ", our_ct, sizeof(test_pt) - 1U);
+    print_hex("    TAG: ", our_tag, RIJNDAEL256_GCM_TAG_LEN);
+    printk("    DEC: %s\n", our_dec);
+    printk("    verify: %s\n\n", rc == 1 ? "OK" : "FAIL");
+}
+
 void verify_correctness(void)
 {
     printk("--- Correctness ---\n\n");
     correctness_128();
     correctness_256();
+    correctness_rijndael256();
 }
 
 /* ── AES-128 individual benchmarks ─────────────────────── */
@@ -860,6 +903,94 @@ static void bench_256_psa_decrypt(void)
     psa_destroy_key(key_id);
 }
 
+/* ── Rijndael-256 individual benchmarks ────────────────── */
+
+static void bench_rijndael256_aead_encrypt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0;
+    uint64_t total_ns = 0;
+    uint32_t block_calls;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+    block_calls = 0;
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        rijndael256_gcm_counters_reset();
+        rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                     ad_buf, AD_LEN,
+                                     pt_buf, MESSAGE_LEN,
+                                     ct_buf, tag_buf_r256);
+        block_calls = rijndael256_gcm_get_block_calls();
+    }
+
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        start = timing_counter_get();
+        rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                     ad_buf, AD_LEN,
+                                     pt_buf, MESSAGE_LEN,
+                                     ct_buf, tag_buf_r256);
+        end = timing_counter_get();
+
+        {
+            uint64_t c2 = timing_cycles_get(&start, &end);
+            total_c += c2;
+            total_ns += timing_cycles_to_ns(c2);
+        }
+    }
+
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead encrypt",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [rijndael block/op] %lu\n", (unsigned long)block_calls);
+}
+
+static void bench_rijndael256_aead_decrypt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0;
+    uint64_t total_ns = 0;
+    uint32_t block_calls;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+    rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                 ad_buf, AD_LEN,
+                                 pt_buf, MESSAGE_LEN,
+                                 ct_buf, tag_buf_r256);
+    block_calls = 0;
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        rijndael256_gcm_counters_reset();
+        (void)rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                             ad_buf, AD_LEN,
+                                             ct_buf, MESSAGE_LEN,
+                                             tag_buf_r256, dec_buf);
+        block_calls = rijndael256_gcm_get_block_calls();
+    }
+
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        start = timing_counter_get();
+        (void)rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                             ad_buf, AD_LEN,
+                                             ct_buf, MESSAGE_LEN,
+                                             tag_buf_r256, dec_buf);
+        end = timing_counter_get();
+
+        {
+            uint64_t c2 = timing_cycles_get(&start, &end);
+            total_c += c2;
+            total_ns += timing_cycles_to_ns(c2);
+        }
+    }
+
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead decrypt",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [rijndael block/op] %lu\n", (unsigned long)block_calls);
+}
+
 /* ── top-level entry ───────────────────────────────────── */
 
 void bench_gcm_all(void)
@@ -896,6 +1027,16 @@ void bench_gcm_all(void)
     printk("  [PSA Crypto]\n");
     bench_256_psa_encrypt();
     bench_256_psa_decrypt();
+
+    printk("[Rijndael-256-GCM] Benchmark  msg=%d ad=%d iters=%d\n",
+           MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes: key=%d nonce=%d tag=%d pt=%d ct=%d ad=%d\n",
+           RIJNDAEL256_KEY_LEN, RIJNDAEL256_GCM_NONCE_LEN, RIJNDAEL256_GCM_TAG_LEN,
+           MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
+    printk("  %-16s  %10s  %12s\n", "operation", "cycles", "ns");
+    printk("  [Our implementation]\n");
+    bench_rijndael256_aead_encrypt();
+    bench_rijndael256_aead_decrypt();
 
     printk("\n--- Benchmark complete ---\n");
 }

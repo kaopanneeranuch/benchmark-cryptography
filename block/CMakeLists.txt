@@ -7,6 +7,7 @@ zephyr_include_directories(
     ../BC__Butterknife/include
     ../SKINNY-AEAD
     ../forkskinny-opt32
+    ../deoxysi128/deoxysi128/ref
     ../deoxysi256/deoxysi256/ref
     ../deoxysi
 )
@@ -17,7 +18,18 @@ target_sources(app PRIVATE
     ../BC__Butterknife/source/butterknife256_tks.c
     ../SKINNY-AEAD/internal-skinny128.c
     ../forkskinny-opt32/internal-forkskinny.c
+    ../deoxysi128/deoxysi128/ref/tweakableBC.c
+    ../deoxysi128/deoxysi128/ref/deoxysi.c
     ../deoxysi256/deoxysi256/ref/tweakableBC.c
     ../deoxysi256/deoxysi256/ref/deoxysi.c
     ../deoxysi/deoxys.c
+)
+
+# deoxysi128/ref and deoxysi256/ref export identical symbol names.
+# Prefix deoxysi128/ref symbols so both variants can coexist in one image.
+set_source_files_properties(
+    ../deoxysi128/deoxysi128/ref/tweakableBC.c
+    ../deoxysi128/deoxysi128/ref/deoxysi.c
+    PROPERTIES COMPILE_DEFINITIONS
+    "G=deoxysi128_ref_G;H=deoxysi128_ref_H;deoxysKeySetupEnc=deoxysi128_ref_deoxysKeySetupEnc;deoxysKeySetupDec=deoxysi128_ref_deoxysKeySetupDec;aesTweakEncrypt=aesTweakEncrypt_deoxysi128_ref;aesTweakDecrypt=aesTweakDecrypt_deoxysi128_ref;deoxys_aead_encrypt=deoxys128_ref_aead_encrypt;deoxys_aead_decrypt=deoxys128_ref_aead_decrypt"
 )

@@ -5,7 +5,8 @@ project(aes)
 
 target_sources(app PRIVATE
 	src/main.c
-	src/aes-128_gcm.c
+	src/aes_gcm.c
+	src/rijndael_256_gcm.c
 	src/bench.c
 )
 

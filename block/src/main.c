@@ -3,52 +3,51 @@
 #include <zephyr/timing/timing.h>
 
 #include <mbedtls/aes.h>
+#include <gcrypt.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
 #include "butterknife.h"
 #include "internal-skinny128.h"
 #include "internal-forkskinny.h"
-#include "../deoxysi256/deoxysi256/ref/tweakableBC.h"
-/* Unity-include deoxysi128's tweakableBC — rename every non-static symbol
-   to avoid clashes with the deoxysi256 tweakableBC.c compiled separately. */
-#define choose_lfsr      choose_lfsr_deoxysi128
-#define G                G_deoxysi128
-#define H                H_deoxysi128
-#define deoxysKeySetupEnc deoxysKeySetupEnc_deoxysi128
-#define deoxysKeySetupDec deoxysKeySetupDec_deoxysi128
-#define aesTweakEncrypt  aesTweakEncrypt_deoxysi128
-#define aesTweakDecrypt  aesTweakDecrypt_deoxysi128
-#include "../deoxysi128/deoxysi128/ref/tweakableBC.c"
-#undef choose_lfsr
-#undef G
-#undef H
-#undef deoxysKeySetupEnc
-#undef deoxysKeySetupDec
-#undef aesTweakEncrypt
-#undef aesTweakDecrypt
-#include "../deoxysi256/deoxysi256/ref/deoxys.h"   /* deoxys_aead_encrypt       (Deoxys-I-256) */
-/* Forward-declare only what we call from deoxysi/deoxys.c — avoids pulling
-   in forkskinny-opt32/skinny.h which conflicts with internal-skinny128.h.  */
+
+/* Deoxys-I-128 custom implementation (deoxysi/) */
 void deoxys_I_aead_encrypt_128(const uint8_t *message, size_t m_len,
+                               const uint8_t *key, const uint8_t *nonce,
+                               uint8_t *ciphertext, size_t *c_len);
+int deoxys_I_aead_decrypt_128(uint8_t *message, size_t *m_len,
+                              const uint8_t *key, const uint8_t *nonce,
+                              const uint8_t *ciphertext, size_t c_len);
+
+/* Deoxys-I-128 reference implementation (deoxysi128/deoxysi128/ref, renamed) */
+void deoxys128_ref_aead_encrypt(const uint8_t *ass_data, size_t ass_data_len,
+                                const uint8_t *message, size_t m_len,
                                 const uint8_t *key, const uint8_t *nonce,
                                 uint8_t *ciphertext, size_t *c_len);
+int deoxys128_ref_aead_decrypt(const uint8_t *ass_data, size_t ass_data_len,
+                               uint8_t *message, size_t *m_len,
+                               const uint8_t *key, const uint8_t *nonce,
+                               const uint8_t *ciphertext, size_t c_len);
+void aesTweakEncrypt_deoxysi128_ref(uint32_t tweakey_size,
+                                    const uint8_t pt[16],
+                                    const uint8_t key[],
+                                    uint8_t ct[16]);
 
-/* Unity-include skinny.c to provide skinny_128_256_init_tk1/tk2/encrypt_with_tks
-   and skinny_64_192_* needed by deoxysi/deoxys.c.  Rename skinny_128_256_encrypt
-   so it doesn't clash with internal-skinny128.c's same-named symbol.         */
-#define skinny_128_256_encrypt skinny_128_256_encrypt__fks_unused
-#include "../forkskinny-opt32/skinny.c"
-#undef skinny_128_256_encrypt
-
-/* Unity-include Deoxys-I-128 ref (deoxysi128) — rename exported symbols to
-   avoid clash with Deoxys-I-256's deoxys_aead_encrypt from deoxysi256.      */
-#define deoxys_aead_encrypt deoxys128_aead_encrypt
-#define deoxys_aead_decrypt deoxys128_aead_decrypt
-#include "../deoxysi128/deoxysi128/ref/deoxysi.c"
-#undef deoxys_aead_encrypt
-#undef deoxys_aead_decrypt
+/* Deoxys-I-256 reference implementation (deoxysi256/deoxysi256/ref) */
+void deoxys_aead_encrypt(const uint8_t *ass_data, size_t ass_data_len,
+                         const uint8_t *message, size_t m_len,
+                         const uint8_t *key, const uint8_t *nonce,
+                         uint8_t *ciphertext, size_t *c_len);
+int deoxys_aead_decrypt(const uint8_t *ass_data, size_t ass_data_len,
+                        uint8_t *message, size_t *m_len,
+                        const uint8_t *key, const uint8_t *nonce,
+                        const uint8_t *ciphertext, size_t c_len);
+void aesTweakEncrypt(uint32_t tweakey_size,
+                     const uint8_t pt[16],
+                     const uint8_t key[],
+                     uint8_t ct[16]);
 
 #define WARMUP_ITERS  10
 #define BENCH_ITERS   100
@@ -74,6 +73,12 @@ static const uint8_t key_48[48] = {
     0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f
 };
 static const uint8_t plaintext[16] = {
+    0x32,0x43,0xf6,0xa8,0x88,0x5a,0x30,0x8d,
+    0x31,0x31,0x98,0xa2,0xe0,0x37,0x07,0x34
+};
+static const uint8_t plaintext_32[32] = {
+    0x32,0x43,0xf6,0xa8,0x88,0x5a,0x30,0x8d,
+    0x31,0x31,0x98,0xa2,0xe0,0x37,0x07,0x34,
     0x32,0x43,0xf6,0xa8,0x88,0x5a,0x30,0x8d,
     0x31,0x31,0x98,0xa2,0xe0,0x37,0x07,0x34
 };
@@ -154,6 +159,19 @@ static void bench_forkskinny128_256_2leg(void)
     BENCH_END();
 }
 
+static void bench_deoxysbc128(void)
+{
+    uint8_t output[16];
+    uint8_t tk[32];
+    memcpy(tk, key_32, 32);
+
+    BENCH_BEGIN("Deoxys-BC-128")
+    BENCH_WARMUP(aesTweakEncrypt_deoxysi128_ref(256, plaintext, tk, output))
+    BENCH_MEASURE(aesTweakEncrypt_deoxysi128_ref(256, plaintext, tk, output))
+    sink ^= output[0];
+    BENCH_END();
+}
+
 static void bench_deoxysbc256(void)
 {
     uint8_t output[16];
@@ -163,19 +181,6 @@ static void bench_deoxysbc256(void)
     BENCH_BEGIN("Deoxys-BC-256")
     BENCH_WARMUP(aesTweakEncrypt(256, (uint8_t *)plaintext, tk, output))
     BENCH_MEASURE(aesTweakEncrypt(256, (uint8_t *)plaintext, tk, output))
-    sink ^= output[0];
-    BENCH_END();
-}
-
-static void bench_deoxysbc128(void)
-{
-    uint8_t output[16];
-    uint8_t tk[32];
-    memcpy(tk, key_32, 32);
-
-    BENCH_BEGIN("Deoxys-BC-128")
-    BENCH_WARMUP(aesTweakEncrypt_deoxysi128(256, (uint8_t *)plaintext, tk, output))
-    BENCH_MEASURE(aesTweakEncrypt_deoxysi128(256, (uint8_t *)plaintext, tk, output))
     sink ^= output[0];
     BENCH_END();
 }
@@ -225,6 +230,34 @@ static void bench_aes256(void)
     mbedtls_aes_free(&ctx);
 }
 
+static void bench_rijndael256(void)
+{
+    uint8_t output[32];
+    gcry_cipher_hd_t hd;
+    gcry_error_t err;
+
+    err = gcry_cipher_open(&hd, GCRY_CIPHER_RIJNDAEL256, GCRY_CIPHER_MODE_ECB, 0);
+    if (err) {
+        printk("  %-30s : libgcrypt open failed (%d)\n", "Rijndael-256", (int)err);
+        return;
+    }
+
+    err = gcry_cipher_setkey(hd, key_32, sizeof(key_32));
+    if (err) {
+        printk("  %-30s : libgcrypt setkey failed (%d)\n", "Rijndael-256", (int)err);
+        gcry_cipher_close(hd);
+        return;
+    }
+
+    BENCH_BEGIN("Rijndael-256")
+    BENCH_WARMUP(gcry_cipher_encrypt(hd, output, sizeof(output), plaintext_32, sizeof(plaintext_32)))
+    BENCH_MEASURE(gcry_cipher_encrypt(hd, output, sizeof(output), plaintext_32, sizeof(plaintext_32)))
+    sink ^= output[0];
+    BENCH_END();
+
+    gcry_cipher_close(hd);
+}
+
 /* ------------------------------------------------------------------ */
 /* Deoxys-I AEAD comparison                                            */
 /*   deoxysi256/ref  →  Deoxys-I-256  (key=32 B, nonce=8 B)          */
@@ -236,7 +269,11 @@ static void verify_deoxys_aead(void)
     uint8_t ct256[32];   /* 16-byte CT + 16-byte tag */
     uint8_t ct128[32];
     uint8_t ct128ref[32];
+    uint8_t recovered[16];
     size_t  len256 = 0, len128 = 0, len128ref = 0;
+    size_t  recovered_len = 0;
+    bool ok256 = false, ok128 = false, ok128ref = false;
+    bool ct_match_128 = false;
 
     deoxys_aead_encrypt(NULL, 0, plaintext, 16,
                         key_32, nonce_8, ct256, &len256);
@@ -244,16 +281,50 @@ static void verify_deoxys_aead(void)
     deoxys_I_aead_encrypt_128(plaintext, 16,
                               key_16, nonce_8, ct128, &len128);
 
-    deoxys128_aead_encrypt(NULL, 0, plaintext, 16,
-                           key_16, nonce_8, ct128ref, &len128ref);
+    deoxys128_ref_aead_encrypt(NULL, 0, plaintext, 16,
+                               key_16, nonce_8, ct128ref, &len128ref);
+
+    ok256 = (len256 == 32);
+    if (ok256) {
+        recovered_len = 0;
+        ok256 = (deoxys_aead_decrypt(NULL, 0, recovered, &recovered_len,
+                                     key_32, nonce_8, ct256, len256) == 0) &&
+                (recovered_len == 16) &&
+                (memcmp(recovered, plaintext, 16) == 0);
+    }
+
+    ok128 = (len128 == 32);
+    if (ok128) {
+        recovered_len = 0;
+        ok128 = (deoxys_I_aead_decrypt_128(recovered, &recovered_len,
+                                           key_16, nonce_8, ct128, len128) == 0) &&
+                (recovered_len == 16) &&
+                (memcmp(recovered, plaintext, 16) == 0);
+    }
+
+    ok128ref = (len128ref == 32);
+    if (ok128ref) {
+        recovered_len = 0;
+        ok128ref = (deoxys128_ref_aead_decrypt(NULL, 0, recovered, &recovered_len,
+                                               key_16, nonce_8, ct128ref, len128ref) == 0) &&
+                   (recovered_len == 16) &&
+                   (memcmp(recovered, plaintext, 16) == 0);
+    }
+
+    ct_match_128 = (len128 == len128ref) &&
+                   (memcmp(ct128, ct128ref, len128) == 0);
 
     printk("\n=== Deoxys-I AEAD CT Comparison ===\n");
+    print_hex("Deoxys-I-128 CT  (deoxysi128)", ct128ref,      16);
+    print_hex("Deoxys-I-128 tag (deoxysi128)", ct128ref + 16, 16);
     print_hex("Deoxys-I-256 CT  (deoxysi256)", ct256,         16);
     print_hex("Deoxys-I-256 tag (deoxysi256)", ct256 + 16,    16);
     print_hex("Deoxys-I-128 CT  (deoxysi)",    ct128,         16);
     print_hex("Deoxys-I-128 tag (deoxysi)",    ct128 + 16,    16);
-    print_hex("Deoxys-I-128 CT  (deoxysi128)", ct128ref,      16);
-    print_hex("Deoxys-I-128 tag (deoxysi128)", ct128ref + 16, 16);
+    printk("  %-30s : %s\n", "Decrypt check deoxysi256/ref", ok256 ? "PASS" : "FAIL");
+    printk("  %-30s : %s\n", "Decrypt check deoxysi/deoxysi", ok128 ? "PASS" : "FAIL");
+    printk("  %-30s : %s\n", "Decrypt check deoxysi128/ref", ok128ref ? "PASS" : "FAIL");
+    printk("  %-30s : %s\n", "deoxysi vs deoxysi128/ref", ct_match_128 ? "MATCH" : "MISMATCH");
     printk("\n");
 }
 
@@ -290,11 +361,11 @@ static void bench_deoxysI128_ref(void)
     uint8_t ct[32];
     size_t  ct_len = 0;
 
-    BENCH_BEGIN("Deoxys-I-128 (deoxysi128)")
-    BENCH_WARMUP(deoxys128_aead_encrypt(NULL, 0, plaintext, 16,
-                                        key_16, nonce_8, ct, &ct_len))
-    BENCH_MEASURE(deoxys128_aead_encrypt(NULL, 0, plaintext, 16,
-                                         key_16, nonce_8, ct, &ct_len))
+    BENCH_BEGIN("Deoxys-I-128 (deoxysi128/ref)")
+    BENCH_WARMUP(deoxys128_ref_aead_encrypt(NULL, 0, plaintext, 16,
+                                            key_16, nonce_8, ct, &ct_len))
+    BENCH_MEASURE(deoxys128_ref_aead_encrypt(NULL, 0, plaintext, 16,
+                                             key_16, nonce_8, ct, &ct_len))
     sink ^= ct[0];
     BENCH_END();
 }
@@ -316,8 +387,8 @@ int main(void)
     bench_skinny128_256();
     bench_forkskinny128_256_1leg();
     bench_forkskinny128_256_2leg();
-    bench_deoxysbc256();
     bench_deoxysbc128();
+    bench_deoxysbc256();
     bench_deoxysI256();
     bench_deoxysI128();
     bench_deoxysI128_ref();
@@ -326,7 +397,7 @@ int main(void)
     bench_butterknife256(8, "Butterknife-256 8-leg");
     bench_aes128();
     bench_aes256();
-
+    bench_rijndael256();
     timing_stop();
 
     printk("\nDone (sink=%u).\n", sink);
