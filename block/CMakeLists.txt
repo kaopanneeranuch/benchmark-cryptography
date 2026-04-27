@@ -14,15 +14,26 @@ zephyr_include_directories(
 
 target_sources(app PRIVATE
     src/main.c
+    src/rijndael256.c
     ../BC__Butterknife/source/butterknife256.c
     ../BC__Butterknife/source/butterknife256_tks.c
     ../SKINNY-AEAD/internal-skinny128.c
     ../forkskinny-opt32/internal-forkskinny.c
+    ../forkskinny-opt32/skinny.c
     ../deoxysi128/deoxysi128/ref/tweakableBC.c
     ../deoxysi128/deoxysi128/ref/deoxysi.c
     ../deoxysi256/deoxysi256/ref/tweakableBC.c
     ../deoxysi256/deoxysi256/ref/deoxysi.c
     ../deoxysi/deoxys.c
+)
+
+# forkskinny-opt32/skinny.c and SKINNY-AEAD both define skinny_128_256_encrypt
+# with different signatures. Prefix the forkskinny variant used by deoxysi.
+set_source_files_properties(
+    ../forkskinny-opt32/skinny.c
+    ../deoxysi/deoxys.c
+    PROPERTIES COMPILE_DEFINITIONS
+    "skinny_128_256_encrypt=fs_skinny_128_256_encrypt"
 )
 
 # deoxysi128/ref and deoxysi256/ref export identical symbol names.
@@ -31,5 +42,5 @@ set_source_files_properties(
     ../deoxysi128/deoxysi128/ref/tweakableBC.c
     ../deoxysi128/deoxysi128/ref/deoxysi.c
     PROPERTIES COMPILE_DEFINITIONS
-    "G=deoxysi128_ref_G;H=deoxysi128_ref_H;deoxysKeySetupEnc=deoxysi128_ref_deoxysKeySetupEnc;deoxysKeySetupDec=deoxysi128_ref_deoxysKeySetupDec;aesTweakEncrypt=aesTweakEncrypt_deoxysi128_ref;aesTweakDecrypt=aesTweakDecrypt_deoxysi128_ref;deoxys_aead_encrypt=deoxys128_ref_aead_encrypt;deoxys_aead_decrypt=deoxys128_ref_aead_decrypt"
+    "choose_lfsr=deoxysi128_ref_choose_lfsr;G=deoxysi128_ref_G;H=deoxysi128_ref_H;deoxysKeySetupEnc=deoxysi128_ref_deoxysKeySetupEnc;deoxysKeySetupDec=deoxysi128_ref_deoxysKeySetupDec;aesTweakEncrypt=aesTweakEncrypt_deoxysi128_ref;aesTweakDecrypt=aesTweakDecrypt_deoxysi128_ref;deoxys_aead_encrypt=deoxys128_ref_aead_encrypt;deoxys_aead_decrypt=deoxys128_ref_aead_decrypt"
 )

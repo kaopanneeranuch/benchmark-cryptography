@@ -3,7 +3,7 @@
 #include <zephyr/timing/timing.h>
 
 #include <mbedtls/aes.h>
-#include <gcrypt.h>
+#include "rijndael256.h"
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -233,29 +233,14 @@ static void bench_aes256(void)
 static void bench_rijndael256(void)
 {
     uint8_t output[32];
-    gcry_cipher_hd_t hd;
-    gcry_error_t err;
-
-    err = gcry_cipher_open(&hd, GCRY_CIPHER_RIJNDAEL256, GCRY_CIPHER_MODE_ECB, 0);
-    if (err) {
-        printk("  %-30s : libgcrypt open failed (%d)\n", "Rijndael-256", (int)err);
-        return;
-    }
-
-    err = gcry_cipher_setkey(hd, key_32, sizeof(key_32));
-    if (err) {
-        printk("  %-30s : libgcrypt setkey failed (%d)\n", "Rijndael-256", (int)err);
-        gcry_cipher_close(hd);
-        return;
-    }
+    rijndael256_ctx_t ctx;
+    rijndael256_set_key(&ctx, key_32);
 
     BENCH_BEGIN("Rijndael-256")
-    BENCH_WARMUP(gcry_cipher_encrypt(hd, output, sizeof(output), plaintext_32, sizeof(plaintext_32)))
-    BENCH_MEASURE(gcry_cipher_encrypt(hd, output, sizeof(output), plaintext_32, sizeof(plaintext_32)))
+    BENCH_WARMUP(rijndael256_encrypt(&ctx, plaintext_32, output))
+    BENCH_MEASURE(rijndael256_encrypt(&ctx, plaintext_32, output))
     sink ^= output[0];
     BENCH_END();
-
-    gcry_cipher_close(hd);
 }
 
 /* ------------------------------------------------------------------ */

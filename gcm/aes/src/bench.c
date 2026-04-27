@@ -97,13 +97,13 @@ static bool psa_import_aes_key(const uint8_t *key, size_t key_len, size_t key_bi
     return true;
 }
 
+/* ── probe helpers (measure block calls for one operation) ── */
+
 static uint32_t probe_128_block_calls_auth_only(void)
 {
     aes_gcm_counters_reset();
     aes_128_gcm_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                     ad_buf, AD_LEN,
-                     ct_buf, MESSAGE_LEN,
-                     tag_buf);
+                     ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     return aes_128_gcm_get_block_calls();
 }
 
@@ -111,29 +111,21 @@ static uint32_t probe_128_block_calls_verify_only(void)
 {
     aes_gcm_counters_reset();
     (void)aes_128_gcm_verify(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             ct_buf, MESSAGE_LEN,
-                             tag_buf);
+                             ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     return aes_128_gcm_get_block_calls();
 }
 
-static uint32_t probe_128_block_calls_aead_encrypt(void)
+static uint32_t probe_128_block_calls_encrypt_only(void)
 {
     aes_gcm_counters_reset();
-    aes_128_gcm_encrypt_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN,
-                             ct_buf, tag_buf);
+    aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
     return aes_128_gcm_get_block_calls();
 }
 
-static uint32_t probe_128_block_calls_aead_decrypt(void)
+static uint32_t probe_128_block_calls_decrypt_only(void)
 {
     aes_gcm_counters_reset();
-    (void)aes_128_gcm_decrypt_verify(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                     ad_buf, AD_LEN,
-                                     ct_buf, MESSAGE_LEN,
-                                     tag_buf, dec_buf);
+    aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
     return aes_128_gcm_get_block_calls();
 }
 
@@ -141,9 +133,7 @@ static uint32_t probe_256_block_calls_auth_only(void)
 {
     aes_gcm_counters_reset();
     aes_256_gcm_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                     ad_buf, AD_LEN,
-                     ct_buf, MESSAGE_LEN,
-                     tag_buf);
+                     ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     return aes_256_gcm_get_block_calls();
 }
 
@@ -151,30 +141,54 @@ static uint32_t probe_256_block_calls_verify_only(void)
 {
     aes_gcm_counters_reset();
     (void)aes_256_gcm_verify(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             ct_buf, MESSAGE_LEN,
-                             tag_buf);
+                             ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     return aes_256_gcm_get_block_calls();
 }
 
-static uint32_t probe_256_block_calls_aead_encrypt(void)
+static uint32_t probe_256_block_calls_encrypt_only(void)
 {
     aes_gcm_counters_reset();
-    aes_256_gcm_encrypt_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN,
-                             ct_buf, tag_buf);
+    aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
     return aes_256_gcm_get_block_calls();
 }
 
-static uint32_t probe_256_block_calls_aead_decrypt(void)
+static uint32_t probe_256_block_calls_decrypt_only(void)
 {
     aes_gcm_counters_reset();
-    (void)aes_256_gcm_decrypt_verify(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                     ad_buf, AD_LEN,
-                                     ct_buf, MESSAGE_LEN,
-                                     tag_buf, dec_buf);
+    aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
     return aes_256_gcm_get_block_calls();
+}
+
+static uint32_t probe_rijndael256_block_calls_auth_only(void)
+{
+    rijndael256_gcm_counters_reset();
+    rijndael256_gcm_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                         ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf_r256);
+    return rijndael256_gcm_get_block_calls();
+}
+
+static uint32_t probe_rijndael256_block_calls_verify_only(void)
+{
+    rijndael256_gcm_counters_reset();
+    (void)rijndael256_gcm_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                 ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf_r256);
+    return rijndael256_gcm_get_block_calls();
+}
+
+static uint32_t probe_rijndael256_block_calls_encrypt_only(void)
+{
+    rijndael256_gcm_counters_reset();
+    rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                               pt_buf, MESSAGE_LEN, ct_buf);
+    return rijndael256_gcm_get_block_calls();
+}
+
+static uint32_t probe_rijndael256_block_calls_decrypt_only(void)
+{
+    rijndael256_gcm_counters_reset();
+    rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                               ct_buf, MESSAGE_LEN, dec_buf);
+    return rijndael256_gcm_get_block_calls();
 }
 
 /* ── correctness ────────────────────────────────────────── */
@@ -365,7 +379,7 @@ void verify_correctness(void)
     correctness_rijndael256();
 }
 
-/* ── AES-128 individual benchmarks ─────────────────────── */
+/* ── AES-128 benchmarks ─────────────────────────────────── */
 
 static void bench_128_auth_only(void)
 {
@@ -381,24 +395,17 @@ static void bench_128_auth_only(void)
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         aes_128_gcm_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                         ad_buf, AD_LEN,
-                         ct_buf, MESSAGE_LEN,
-                         tag_buf);
+                         ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         aes_128_gcm_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                         ad_buf, AD_LEN,
-                         ct_buf, MESSAGE_LEN,
-                         tag_buf);
+                         ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "auth only",
@@ -417,31 +424,22 @@ static void bench_128_verify_only(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
     aes_128_gcm_encrypt_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN,
-                             ct_buf, tag_buf);
+                             ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
     block_calls = probe_128_block_calls_verify_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         (void)aes_128_gcm_verify(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 ct_buf, MESSAGE_LEN,
-                                 tag_buf);
+                                 ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         (void)aes_128_gcm_verify(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 ct_buf, MESSAGE_LEN,
-                                 tag_buf);
+                                 ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "verify only",
@@ -450,7 +448,7 @@ static void bench_128_verify_only(void)
     printk("    [aes block/op] %lu\n", (unsigned long)block_calls);
 }
 
-static void bench_128_aead_encrypt(void)
+static void bench_128_encrypt_only(void)
 {
     timing_t start, end;
     uint64_t total_c = 0;
@@ -458,38 +456,28 @@ static void bench_128_aead_encrypt(void)
     uint32_t block_calls;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    fill_pattern(ad_buf, AD_LEN);
-    block_calls = probe_128_block_calls_aead_encrypt();
+    block_calls = probe_128_block_calls_encrypt_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
-        aes_128_gcm_encrypt_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 pt_buf, MESSAGE_LEN,
-                                 ct_buf, tag_buf);
+        aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        aes_128_gcm_encrypt_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 pt_buf, MESSAGE_LEN,
-                                 ct_buf, tag_buf);
+        aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
-    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead encrypt",
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "encrypt only",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
     printk("    [aes block/op] %lu\n", (unsigned long)block_calls);
 }
 
-static void bench_128_aead_decrypt(void)
+static void bench_128_decrypt_only(void)
 {
     timing_t start, end;
     uint64_t total_c = 0;
@@ -497,36 +485,23 @@ static void bench_128_aead_decrypt(void)
     uint32_t block_calls;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    fill_pattern(ad_buf, AD_LEN);
-    aes_128_gcm_encrypt_auth(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN,
-                             ct_buf, tag_buf);
-    block_calls = probe_128_block_calls_aead_decrypt();
+    aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+    block_calls = probe_128_block_calls_decrypt_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
-        (void)aes_128_gcm_decrypt_verify(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                         ad_buf, AD_LEN,
-                                         ct_buf, MESSAGE_LEN,
-                                         tag_buf, dec_buf);
+        aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        (void)aes_128_gcm_decrypt_verify(bench_key_128, bench_nonce, AES_GCM_NONCE_LEN,
-                                         ad_buf, AD_LEN,
-                                         ct_buf, MESSAGE_LEN,
-                                         tag_buf, dec_buf);
+        aes_128_gcm_ctr_crypt(bench_key_128, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
-    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead decrypt",
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "decrypt only",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
     printk("    [aes block/op] %lu\n", (unsigned long)block_calls);
@@ -564,12 +539,9 @@ static void bench_128_psa_encrypt(void)
                                pt_buf, MESSAGE_LEN,
                                out, sizeof(out), &out_len);
         end = timing_counter_get();
-
-        {
-            uint64_t c = timing_cycles_get(&start, &end);
-            total_c += c;
-            total_ns += timing_cycles_to_ns(c);
-        }
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c += c;
+        total_ns += timing_cycles_to_ns(c);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "psa encrypt",
@@ -619,12 +591,9 @@ static void bench_128_psa_decrypt(void)
                                enc, enc_len,
                                dec, sizeof(dec), &dec_len);
         end = timing_counter_get();
-
-        {
-            uint64_t c = timing_cycles_get(&start, &end);
-            total_c += c;
-            total_ns += timing_cycles_to_ns(c);
-        }
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c += c;
+        total_ns += timing_cycles_to_ns(c);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "psa decrypt",
@@ -634,7 +603,7 @@ static void bench_128_psa_decrypt(void)
     psa_destroy_key(key_id);
 }
 
-/* ── AES-256 individual benchmarks ─────────────────────── */
+/* ── AES-256 benchmarks ─────────────────────────────────── */
 
 static void bench_256_auth_only(void)
 {
@@ -650,24 +619,17 @@ static void bench_256_auth_only(void)
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         aes_256_gcm_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                         ad_buf, AD_LEN,
-                         ct_buf, MESSAGE_LEN,
-                         tag_buf);
+                         ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         aes_256_gcm_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                         ad_buf, AD_LEN,
-                         ct_buf, MESSAGE_LEN,
-                         tag_buf);
+                         ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "auth only",
@@ -686,31 +648,22 @@ static void bench_256_verify_only(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
     aes_256_gcm_encrypt_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN,
-                             ct_buf, tag_buf);
+                             ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
     block_calls = probe_256_block_calls_verify_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         (void)aes_256_gcm_verify(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 ct_buf, MESSAGE_LEN,
-                                 tag_buf);
+                                 ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
         (void)aes_256_gcm_verify(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 ct_buf, MESSAGE_LEN,
-                                 tag_buf);
+                                 ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "verify only",
@@ -719,7 +672,7 @@ static void bench_256_verify_only(void)
     printk("    [aes block/op] %lu\n", (unsigned long)block_calls);
 }
 
-static void bench_256_aead_encrypt(void)
+static void bench_256_encrypt_only(void)
 {
     timing_t start, end;
     uint64_t total_c = 0;
@@ -727,38 +680,28 @@ static void bench_256_aead_encrypt(void)
     uint32_t block_calls;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    fill_pattern(ad_buf, AD_LEN);
-    block_calls = probe_256_block_calls_aead_encrypt();
+    block_calls = probe_256_block_calls_encrypt_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
-        aes_256_gcm_encrypt_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 pt_buf, MESSAGE_LEN,
-                                 ct_buf, tag_buf);
+        aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        aes_256_gcm_encrypt_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 pt_buf, MESSAGE_LEN,
-                                 ct_buf, tag_buf);
+        aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
-    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead encrypt",
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "encrypt only",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
     printk("    [aes block/op] %lu\n", (unsigned long)block_calls);
 }
 
-static void bench_256_aead_decrypt(void)
+static void bench_256_decrypt_only(void)
 {
     timing_t start, end;
     uint64_t total_c = 0;
@@ -766,36 +709,23 @@ static void bench_256_aead_decrypt(void)
     uint32_t block_calls;
 
     fill_pattern(pt_buf, MESSAGE_LEN);
-    fill_pattern(ad_buf, AD_LEN);
-    aes_256_gcm_encrypt_auth(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                             ad_buf, AD_LEN,
-                             pt_buf, MESSAGE_LEN,
-                             ct_buf, tag_buf);
-    block_calls = probe_256_block_calls_aead_decrypt();
+    aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, pt_buf, MESSAGE_LEN, ct_buf);
+    block_calls = probe_256_block_calls_decrypt_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
-        (void)aes_256_gcm_decrypt_verify(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                         ad_buf, AD_LEN,
-                                         ct_buf, MESSAGE_LEN,
-                                         tag_buf, dec_buf);
+        aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        (void)aes_256_gcm_decrypt_verify(bench_key_256, bench_nonce, AES_GCM_NONCE_LEN,
-                                         ad_buf, AD_LEN,
-                                         ct_buf, MESSAGE_LEN,
-                                         tag_buf, dec_buf);
+        aes_256_gcm_ctr_crypt(bench_key_256, bench_nonce, ct_buf, MESSAGE_LEN, dec_buf);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
-    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead decrypt",
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "decrypt only",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
     printk("    [aes block/op] %lu\n", (unsigned long)block_calls);
@@ -833,12 +763,9 @@ static void bench_256_psa_encrypt(void)
                                pt_buf, MESSAGE_LEN,
                                out, sizeof(out), &out_len);
         end = timing_counter_get();
-
-        {
-            uint64_t c = timing_cycles_get(&start, &end);
-            total_c += c;
-            total_ns += timing_cycles_to_ns(c);
-        }
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c += c;
+        total_ns += timing_cycles_to_ns(c);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "psa encrypt",
@@ -888,12 +815,9 @@ static void bench_256_psa_decrypt(void)
                                enc, enc_len,
                                dec, sizeof(dec), &dec_len);
         end = timing_counter_get();
-
-        {
-            uint64_t c = timing_cycles_get(&start, &end);
-            total_c += c;
-            total_ns += timing_cycles_to_ns(c);
-        }
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c += c;
+        total_ns += timing_cycles_to_ns(c);
     }
 
     printk("  %-16s: %10llu cycles  |  %10llu ns\n", "psa decrypt",
@@ -903,9 +827,9 @@ static void bench_256_psa_decrypt(void)
     psa_destroy_key(key_id);
 }
 
-/* ── Rijndael-256 individual benchmarks ────────────────── */
+/* ── Rijndael-256 benchmarks ────────────────────────────── */
 
-static void bench_rijndael256_aead_encrypt(void)
+static void bench_rijndael256_auth_only(void)
 {
     timing_t start, end;
     uint64_t total_c = 0;
@@ -914,39 +838,32 @@ static void bench_rijndael256_aead_encrypt(void)
 
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
-    block_calls = 0;
+    rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                               pt_buf, MESSAGE_LEN, ct_buf);
+    block_calls = probe_rijndael256_block_calls_auth_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
-        rijndael256_gcm_counters_reset();
-        rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
-                                     ad_buf, AD_LEN,
-                                     pt_buf, MESSAGE_LEN,
-                                     ct_buf, tag_buf_r256);
-        block_calls = rijndael256_gcm_get_block_calls();
+        rijndael256_gcm_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                             ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf_r256);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
-                                     ad_buf, AD_LEN,
-                                     pt_buf, MESSAGE_LEN,
-                                     ct_buf, tag_buf_r256);
+        rijndael256_gcm_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                             ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf_r256);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
-    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead encrypt",
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "auth only",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
     printk("    [rijndael block/op] %lu\n", (unsigned long)block_calls);
 }
 
-static void bench_rijndael256_aead_decrypt(void)
+static void bench_rijndael256_verify_only(void)
 {
     timing_t start, end;
     uint64_t total_c = 0;
@@ -956,36 +873,89 @@ static void bench_rijndael256_aead_decrypt(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
     rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
-                                 ad_buf, AD_LEN,
-                                 pt_buf, MESSAGE_LEN,
-                                 ct_buf, tag_buf_r256);
-    block_calls = 0;
+                                 ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, ct_buf, tag_buf_r256);
+    block_calls = probe_rijndael256_block_calls_verify_only();
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
-        rijndael256_gcm_counters_reset();
-        (void)rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
-                                             ad_buf, AD_LEN,
-                                             ct_buf, MESSAGE_LEN,
-                                             tag_buf_r256, dec_buf);
-        block_calls = rijndael256_gcm_get_block_calls();
+        (void)rijndael256_gcm_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                     ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf_r256);
     }
 
     for (int i = 0; i < BENCH_ITERS; ++i) {
         start = timing_counter_get();
-        (void)rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
-                                             ad_buf, AD_LEN,
-                                             ct_buf, MESSAGE_LEN,
-                                             tag_buf_r256, dec_buf);
+        (void)rijndael256_gcm_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                     ad_buf, AD_LEN, ct_buf, MESSAGE_LEN, tag_buf_r256);
         end = timing_counter_get();
-
-        {
-            uint64_t c2 = timing_cycles_get(&start, &end);
-            total_c += c2;
-            total_ns += timing_cycles_to_ns(c2);
-        }
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
     }
 
-    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "aead decrypt",
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "verify only",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [rijndael block/op] %lu\n", (unsigned long)block_calls);
+}
+
+static void bench_rijndael256_encrypt_only(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0;
+    uint64_t total_ns = 0;
+    uint32_t block_calls;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    block_calls = probe_rijndael256_block_calls_encrypt_only();
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                                   pt_buf, MESSAGE_LEN, ct_buf);
+    }
+
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        start = timing_counter_get();
+        rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                                   pt_buf, MESSAGE_LEN, ct_buf);
+        end = timing_counter_get();
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
+    }
+
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "encrypt only",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [rijndael block/op] %lu\n", (unsigned long)block_calls);
+}
+
+static void bench_rijndael256_decrypt_only(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0;
+    uint64_t total_ns = 0;
+    uint32_t block_calls;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                               pt_buf, MESSAGE_LEN, ct_buf);
+    block_calls = probe_rijndael256_block_calls_decrypt_only();
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                                   ct_buf, MESSAGE_LEN, dec_buf);
+    }
+
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        start = timing_counter_get();
+        rijndael256_gcm_ctr_crypt(bench_key_rijndael256, bench_nonce_rijndael256,
+                                   ct_buf, MESSAGE_LEN, dec_buf);
+        end = timing_counter_get();
+        uint64_t c2 = timing_cycles_get(&start, &end);
+        total_c += c2;
+        total_ns += timing_cycles_to_ns(c2);
+    }
+
+    printk("  %-16s: %10llu cycles  |  %10llu ns\n", "decrypt only",
            (unsigned long long)(total_c / BENCH_ITERS),
            (unsigned long long)(total_ns / BENCH_ITERS));
     printk("    [rijndael block/op] %lu\n", (unsigned long)block_calls);
@@ -1006,8 +976,8 @@ void bench_gcm_all(void)
     printk("  [Our implementation]\n");
     bench_128_auth_only();
     bench_128_verify_only();
-    bench_128_aead_encrypt();
-    bench_128_aead_decrypt();
+    bench_128_encrypt_only();
+    bench_128_decrypt_only();
     printk("  [PSA Crypto]\n");
     bench_128_psa_encrypt();
     bench_128_psa_decrypt();
@@ -1022,11 +992,12 @@ void bench_gcm_all(void)
     printk("  [Our implementation]\n");
     bench_256_auth_only();
     bench_256_verify_only();
-    bench_256_aead_encrypt();
-    bench_256_aead_decrypt();
+    bench_256_encrypt_only();
+    bench_256_decrypt_only();
     printk("  [PSA Crypto]\n");
     bench_256_psa_encrypt();
     bench_256_psa_decrypt();
+    printk("\n");
 
     printk("[Rijndael-256-GCM] Benchmark  msg=%d ad=%d iters=%d\n",
            MESSAGE_LEN, AD_LEN, BENCH_ITERS);
@@ -1035,8 +1006,9 @@ void bench_gcm_all(void)
            MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
     printk("  %-16s  %10s  %12s\n", "operation", "cycles", "ns");
     printk("  [Our implementation]\n");
-    bench_rijndael256_aead_encrypt();
-    bench_rijndael256_aead_decrypt();
-
+    bench_rijndael256_auth_only();
+    bench_rijndael256_verify_only();
+    bench_rijndael256_encrypt_only();
+    bench_rijndael256_decrypt_only();
     printk("\n--- Benchmark complete ---\n");
 }

@@ -1,6 +1,6 @@
 #include "rijndael_256_gcm.h"
 
-#include <gcrypt.h>
+#include "rijndael256.h"
 #include <string.h>
 
 uint32_t g_rijndael256_block_calls = 0;
@@ -104,8 +104,8 @@ static void gf_mul_256(const uint8_t X[32], const uint8_t Y[32], uint8_t out[32]
         Yvals[0] = new_y0;
 
         if (lsb) {
-            /* Rijndael-256 irreducible polynomial */
-            Yvals[0] ^= 0x4F00000000000000ULL;
+            /* Rijndael-256 irreducible polynomial x^256+x^7+x^6+x^5+x^4+x+1 */
+            Yvals[0] ^= 0xCF00000000000000ULL;
         }
     }
 
@@ -170,23 +170,11 @@ static void ghash_256(const uint8_t H[32],
     memcpy(out, Y, 32);
 }
 
-static gcry_cipher_hd_t rijndael256_create_cipher(const uint8_t key[RIJNDAEL256_KEY_LEN])
+static int rijndael256_create_cipher(const uint8_t key[RIJNDAEL256_KEY_LEN],
+                                     rijndael256_ctx_t *ctx)
 {
-    gcry_cipher_hd_t handle;
-    gcry_error_t err;
-
-    err = gcry_cipher_open(&handle, GCRY_CIPHER_RIJNDAEL, GCRY_CIPHER_MODE_ECB, 0);
-    if (err) {
-        return NULL;
-    }
-
-    err = gcry_cipher_setkey(handle, key, RIJNDAEL256_KEY_LEN);
-    if (err) {
-        gcry_cipher_close(handle);
-        return NULL;
-    }
-
-    return handle;
+    rijndael256_set_key(ctx, key);
+    return 1;
 }
 
 void rijndael256_gcm_ctr_crypt(const uint8_t key[RIJNDAEL256_KEY_LEN],
@@ -194,8 +182,8 @@ void rijndael256_gcm_ctr_crypt(const uint8_t key[RIJNDAEL256_KEY_LEN],
                                const uint8_t *in, size_t len,
                                uint8_t *out)
 {
-    gcry_cipher_hd_t cipher = rijndael256_create_cipher(key);
-    if (!cipher) {
+    rijndael256_ctx_t cipher;
+    if (!rijndael256_create_cipher(key, &cipher)) {
         return;
     }
 
@@ -208,7 +196,7 @@ void rijndael256_gcm_ctr_crypt(const uint8_t key[RIJNDAEL256_KEY_LEN],
     ctr[31] = 2;  /* Counter starts at 2 for Rijndael-256 */
 
     while (off < len) {
-        gcry_cipher_encrypt(cipher, block, sizeof(block), ctr, sizeof(ctr));
+        rijndael256_encrypt(&cipher, ctr, block);
         g_rijndael256_block_calls++;
 
         size_t block_len = (len - off) > 32 ? 32 : (len - off);
@@ -219,8 +207,6 @@ void rijndael256_gcm_ctr_crypt(const uint8_t key[RIJNDAEL256_KEY_LEN],
         off += block_len;
         inc_be32(ctr);
     }
-
-    gcry_cipher_close(cipher);
 }
 
 void rijndael256_gcm_auth(const uint8_t key[RIJNDAEL256_KEY_LEN],
@@ -229,15 +215,15 @@ void rijndael256_gcm_auth(const uint8_t key[RIJNDAEL256_KEY_LEN],
                           const uint8_t *ct, size_t ct_len,
                           uint8_t tag[RIJNDAEL256_GCM_TAG_LEN])
 {
-    gcry_cipher_hd_t cipher = rijndael256_create_cipher(key);
-    if (!cipher) {
+    rijndael256_ctx_t cipher;
+    if (!rijndael256_create_cipher(key, &cipher)) {
         return;
     }
 
     /* Generate H = E(K, 0) */
     uint8_t H[32];
     uint8_t zero[32] = {0};
-    gcry_cipher_encrypt(cipher, H, sizeof(H), zero, sizeof(zero));
+    rijndael256_encrypt(&cipher, zero, H);
     g_rijndael256_block_calls++;
 
     /* GHASH */
@@ -252,15 +238,13 @@ void rijndael256_gcm_auth(const uint8_t key[RIJNDAEL256_KEY_LEN],
 
     /* Encrypt GHASH output */
     uint8_t tag_block[32];
-    gcry_cipher_encrypt(cipher, tag_block, sizeof(tag_block), ctr, sizeof(ctr));
+    rijndael256_encrypt(&cipher, ctr, tag_block);
     g_rijndael256_block_calls++;
 
     /* XOR and truncate to tag length */
     for (size_t i = 0; i < RIJNDAEL256_GCM_TAG_LEN; ++i) {
         tag[i] = ghash_out[i] ^ tag_block[i];
     }
-
-    gcry_cipher_close(cipher);
 }
 
 int rijndael256_gcm_verify(const uint8_t key[RIJNDAEL256_KEY_LEN],
