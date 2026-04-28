@@ -42,7 +42,7 @@ static void arrDOUBLE_128(uint8_t out[16])
 }
 
 /* ------------------------------------------------------------------------- */
-/* Deoxys-BC-256 one-leg helper (official ref, no volatile S-box)           */
+/* Deoxys-I-128 one-leg helper: Deoxys-BC-256, 2 TK words, 14 rounds       */
 /* ------------------------------------------------------------------------- */
 
 static void deoxysBC_256_encrypt_1leg(const uint8_t tk[32],

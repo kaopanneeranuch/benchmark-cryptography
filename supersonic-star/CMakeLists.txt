@@ -6,7 +6,7 @@ project(supersonic)
 zephyr_include_directories(
     ../BC__Butterknife/include
     ../forkskinny-opt32
-    ../deoxysi256/deoxysi256/ref
+    ../deoxysi128/deoxysi128/ref
     src
 )
 
