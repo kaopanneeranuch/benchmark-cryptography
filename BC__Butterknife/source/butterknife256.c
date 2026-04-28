@@ -191,5 +191,5 @@ void butterknife_256_encrypt(const uint8_t tweakey[32], uint8_t* output, const u
 
   butterknife_256_precompute_rtk(tweakey, rtk, num_branches);
   butterknife_256_encrypt_w_rtk(rtk, output, message, num_branches);
-  ++g_butterknife_256_enc_calls;
+  g_butterknife_256_enc_calls += num_branches;
 }

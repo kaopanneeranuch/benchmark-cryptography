@@ -29,12 +29,14 @@ void gctr_3_prime(const uint8_t *key,
 
     while (offset < len) {
         uint8_t stream[GCTR3P_TWO_N];
-        size_t take = len - offset;
+        size_t remaining = len - offset;
+        size_t take = remaining < GCTR3P_TWO_N ? remaining : GCTR3P_TWO_N;
 
-        if (take > GCTR3P_TWO_N)
-            take = GCTR3P_TWO_N;
-
-        forkskinny_128_256_encrypt(tk, stream, stream + GCTR3P_N, ctrU);
+        /* Skip the right branch (C1) when only one output block is needed. */
+        if (remaining <= GCTR3P_N)
+            forkskinny_128_256_encrypt(tk, stream, NULL, ctrU);
+        else
+            forkskinny_128_256_encrypt(tk, stream, stream + GCTR3P_N, ctrU);
 
         for (size_t j = 0; j < take; ++j) {
             out[offset + j] = (uint8_t)(in[offset + j] ^ stream[j]);

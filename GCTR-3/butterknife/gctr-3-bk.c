@@ -54,8 +54,6 @@ void gctr_3_butterknife(const uint8_t key[GCTR3_BK_KEY_LEN],
     if (num_branches == 0u || num_branches > BUTTERKNIFE_MAX_BRANCHES)
         return;
 
-    chunk_len = (size_t)GCTR3_BK_N * (size_t)num_branches;
-
     /* tweakey = tweak || key */
     memcpy(tweakey + GCTR3_BK_N, key, GCTR3_BK_KEY_LEN);
 
@@ -63,16 +61,19 @@ void gctr_3_butterknife(const uint8_t key[GCTR3_BK_KEY_LEN],
     memset(j_enc, 0, sizeof(j_enc));
 
     while (offset < len) {
-        size_t take = len - offset;
-
-        if (take > chunk_len)
-            take = chunk_len;
+        size_t remaining = len - offset;
+        /* Use only as many branches as needed for the remaining data. */
+        uint8_t b = (uint8_t)((remaining + GCTR3_BK_N - 1u) / GCTR3_BK_N);
+        if (b > num_branches)
+            b = num_branches;
+        chunk_len = (size_t)GCTR3_BK_N * (size_t)b;
+        size_t take = remaining < chunk_len ? remaining : chunk_len;
 
         inc_be_128(j_enc);                 /* <j> */
         xor_block_128(tweakey, R, j_enc); /* tweak = R xor <j> */
 
         /* input block stays fixed as N */
-        butterknife_256_encrypt(tweakey, stream, N, num_branches);
+        butterknife_256_encrypt(tweakey, stream, N, b);
 
         for (size_t i = 0; i < take; ++i)
             out[offset + i] = (uint8_t)(in[offset + i] ^ stream[i]);

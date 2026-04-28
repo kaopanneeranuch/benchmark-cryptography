@@ -51,9 +51,8 @@ void gctr_3_forkskinny(const uint8_t key[GCTR3_KEY_LEN],
     memcpy(tk + GCTR3_N, key, GCTR3_KEY_LEN);
 
     while (offset < len) {
-        size_t take = len - offset;
-        if (take > GCTR3_TWO_N)
-            take = GCTR3_TWO_N;
+        size_t remaining = len - offset;
+        size_t take = remaining < GCTR3_TWO_N ? remaining : GCTR3_TWO_N;
 
         /* j starts at 1 */
         inc_be_128(j_enc);
@@ -61,8 +60,12 @@ void gctr_3_forkskinny(const uint8_t key[GCTR3_KEY_LEN],
         /* T_j = R xor <j> */
         xor_block_128(tk, R, j_enc);
 
-        /* X_j = N (fixed for the whole message) */
-        forkskinny_128_256_encrypt(tk, stream, stream + GCTR3_N, N);
+        /* X_j = N (fixed for the whole message).
+         * Skip the right branch (C1) when only one output block is needed. */
+        if (remaining <= GCTR3_N)
+            forkskinny_128_256_encrypt(tk, stream, NULL, N);
+        else
+            forkskinny_128_256_encrypt(tk, stream, stream + GCTR3_N, N);
 
         for (size_t i = 0; i < take; ++i)
             out[offset + i] = (uint8_t)(in[offset + i] ^ stream[i]);
