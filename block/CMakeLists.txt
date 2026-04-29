@@ -8,6 +8,7 @@ zephyr_include_directories(
     ../SKINNY-AEAD
     ../forkskinny-opt32
     ../deoxysi128/deoxysi128/ref
+    ../deoxysi128/deoxysi128
     ../deoxysi256/deoxysi256/ref
     ../deoxysi
 )
@@ -15,6 +16,7 @@ zephyr_include_directories(
 target_sources(app PRIVATE
     src/main.c
     src/rijndael256.c
+    ../deoxysi128/deoxysi128/deoxysbc256_opt.c
     ../BC__Butterknife/source/butterknife256.c
     ../BC__Butterknife/source/butterknife256_tks.c
     ../SKINNY-AEAD/internal-skinny128.c

@@ -12,6 +12,12 @@
 #include "butterknife.h"
 #include "internal-skinny128.h"
 #include "internal-forkskinny.h"
+#include "deoxysbc256_opt.h"
+
+void aesTweakEncrypt_deoxysi128_ref(uint32_t tweakey_size,
+                                    const uint8_t pt[16],
+                                    const uint8_t key[],
+                                    uint8_t ct[16]);
 
 /* Deoxys-I-128 custom implementation (deoxysi/) */
 void deoxys_I_aead_encrypt_128(const uint8_t *message, size_t m_len,
@@ -30,10 +36,6 @@ int deoxys128_ref_aead_decrypt(const uint8_t *ass_data, size_t ass_data_len,
                                uint8_t *message, size_t *m_len,
                                const uint8_t *key, const uint8_t *nonce,
                                const uint8_t *ciphertext, size_t c_len);
-void aesTweakEncrypt_deoxysi128_ref(uint32_t tweakey_size,
-                                    const uint8_t pt[16],
-                                    const uint8_t key[],
-                                    uint8_t ct[16]);
 
 /* Deoxys-I-256 reference implementation (deoxysi256/deoxysi256/ref) */
 void deoxys_aead_encrypt(const uint8_t *ass_data, size_t ass_data_len,
@@ -44,10 +46,6 @@ int deoxys_aead_decrypt(const uint8_t *ass_data, size_t ass_data_len,
                         uint8_t *message, size_t *m_len,
                         const uint8_t *key, const uint8_t *nonce,
                         const uint8_t *ciphertext, size_t c_len);
-void aesTweakEncrypt(uint32_t tweakey_size,
-                     const uint8_t pt[16],
-                     const uint8_t key[],
-                     uint8_t ct[16]);
 
 #define WARMUP_ITERS  10
 #define BENCH_ITERS   100
@@ -63,14 +61,6 @@ static const uint8_t key_32[32] = {
     0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
     0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,
     0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f
-};
-static const uint8_t key_48[48] = {
-    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
-    0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
-    0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,
-    0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f,
-    0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,
-    0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f
 };
 static const uint8_t plaintext[16] = {
     0x32,0x43,0xf6,0xa8,0x88,0x5a,0x30,0x8d,
@@ -121,127 +111,6 @@ static void print_hex(const char *label, const uint8_t *data, size_t len)
                _total_c  / BENCH_ITERS,                     \
                _total_ns / BENCH_ITERS);                    \
     } while (0)
-
-/* ------------------------------------------------------------------ */
-
-static void bench_skinny128_256(void)
-{
-    uint8_t output[16];
-    skinny_128_256_key_schedule_t ks;
-    skinny_128_256_init(&ks, key_32);
-
-    BENCH_BEGIN("SKINNY-128-256")
-    BENCH_WARMUP(skinny_128_256_encrypt(&ks, output, plaintext))
-    BENCH_MEASURE(skinny_128_256_encrypt(&ks, output, plaintext))
-    sink ^= output[0];
-    BENCH_END();
-}
-
-static void bench_forkskinny128_256_1leg(void)
-{
-    uint8_t out_right[16];
-
-    BENCH_BEGIN("ForkSkinny-128-256 1-leg")
-    BENCH_WARMUP(forkskinny_128_256_encrypt(key_32, NULL, out_right, plaintext))
-    BENCH_MEASURE(forkskinny_128_256_encrypt(key_32, NULL, out_right, plaintext))
-    sink ^= out_right[0];
-    BENCH_END();
-}
-
-static void bench_forkskinny128_256_2leg(void)
-{
-    uint8_t out_left[16], out_right[16];
-
-    BENCH_BEGIN("ForkSkinny-128-256 2-leg")
-    BENCH_WARMUP(forkskinny_128_256_encrypt(key_32, out_left, out_right, plaintext))
-    BENCH_MEASURE(forkskinny_128_256_encrypt(key_32, out_left, out_right, plaintext))
-    sink ^= out_left[0] ^ out_right[0];
-    BENCH_END();
-}
-
-static void bench_deoxysbc128(void)
-{
-    uint8_t output[16];
-    uint8_t tk[32];
-    memcpy(tk, key_32, 32);
-
-    BENCH_BEGIN("Deoxys-BC-128")
-    BENCH_WARMUP(aesTweakEncrypt_deoxysi128_ref(256, plaintext, tk, output))
-    BENCH_MEASURE(aesTweakEncrypt_deoxysi128_ref(256, plaintext, tk, output))
-    sink ^= output[0];
-    BENCH_END();
-}
-
-static void bench_deoxysbc256(void)
-{
-    uint8_t output[16];
-    uint8_t tk[32];
-    memcpy(tk, key_32, 32);
-
-    BENCH_BEGIN("Deoxys-BC-256")
-    BENCH_WARMUP(aesTweakEncrypt(256, (uint8_t *)plaintext, tk, output))
-    BENCH_MEASURE(aesTweakEncrypt(256, (uint8_t *)plaintext, tk, output))
-    sink ^= output[0];
-    BENCH_END();
-}
-
-static void bench_butterknife256(uint8_t num_branches, const char *label)
-{
-    uint8_t output[16];
-    uint32_t rtk[4 * 16];
-    butterknife_256_precompute_rtk(key_32, rtk, num_branches);
-
-    BENCH_BEGIN(label)
-    BENCH_WARMUP(butterknife_256_encrypt_w_rtk(rtk, output, plaintext, num_branches))
-    BENCH_MEASURE(butterknife_256_encrypt_w_rtk(rtk, output, plaintext, num_branches))
-    sink ^= output[0];
-    BENCH_END();
-}
-
-static void bench_aes128(void)
-{
-    uint8_t output[16];
-    mbedtls_aes_context ctx;
-    mbedtls_aes_init(&ctx);
-    mbedtls_aes_setkey_enc(&ctx, key_16, 128);
-
-    BENCH_BEGIN("AES-128")
-    BENCH_WARMUP(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
-    BENCH_MEASURE(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
-    sink ^= output[0];
-    BENCH_END();
-
-    mbedtls_aes_free(&ctx);
-}
-
-static void bench_aes256(void)
-{
-    uint8_t output[16];
-    mbedtls_aes_context ctx;
-    mbedtls_aes_init(&ctx);
-    mbedtls_aes_setkey_enc(&ctx, key_32, 256);
-
-    BENCH_BEGIN("AES-256")
-    BENCH_WARMUP(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
-    BENCH_MEASURE(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
-    sink ^= output[0];
-    BENCH_END();
-
-    mbedtls_aes_free(&ctx);
-}
-
-static void bench_rijndael256(void)
-{
-    uint8_t output[32];
-    rijndael256_ctx_t ctx;
-    rijndael256_set_key(&ctx, key_32);
-
-    BENCH_BEGIN("Rijndael-256")
-    BENCH_WARMUP(rijndael256_encrypt(&ctx, plaintext_32, output))
-    BENCH_MEASURE(rijndael256_encrypt(&ctx, plaintext_32, output))
-    sink ^= output[0];
-    BENCH_END();
-}
 
 /* ------------------------------------------------------------------ */
 /* Deoxys-I AEAD comparison                                            */
@@ -311,47 +180,162 @@ static void verify_deoxys_aead(void)
     printk("  %-30s : %s\n", "Decrypt check deoxysi128/ref", ok128ref ? "PASS" : "FAIL");
     printk("  %-30s : %s\n", "deoxysi vs deoxysi128/ref", ct_match_128 ? "MATCH" : "MISMATCH");
     printk("\n");
+
+    /* Deoxys-BC-256 block cipher: opt vs ref */
+    {
+        uint8_t ct_ref[16], ct_opt_full[16], ct_opt_pre[16];
+        deoxysbc256_ctx_t bc_ctx;
+        bool match_full, match_pre;
+
+        aesTweakEncrypt_deoxysi128_ref(256, plaintext, key_32, ct_ref);
+
+        deoxysbc256_encrypt_full(key_32, plaintext, ct_opt_full);
+
+        deoxysbc256_precompute_tk1(&bc_ctx, key_32);
+        deoxysbc256_encrypt(&bc_ctx, key_32 + 16, plaintext, ct_opt_pre);
+
+        match_full = (memcmp(ct_ref, ct_opt_full, 16) == 0);
+        match_pre  = (memcmp(ct_ref, ct_opt_pre,  16) == 0);
+
+        printk("=== Deoxys-BC-256 Block Cipher Verification ===\n");
+        print_hex("ref  CT (aesTweakEncrypt)", ct_ref,      16);
+        print_hex("opt  CT (encrypt_full)",    ct_opt_full, 16);
+        print_hex("opt  CT (precomputed TK1)", ct_opt_pre,  16);
+        printk("  %-30s : %s\n", "encrypt_full vs ref",    match_full ? "MATCH" : "MISMATCH");
+        printk("  %-30s : %s\n", "precomputed  vs ref",    match_pre  ? "MATCH" : "MISMATCH");
+        printk("\n");
+    }
 }
 
-static void bench_deoxysI256(void)
-{
-    uint8_t ct[32];
-    size_t  ct_len = 0;
+/* ------------------------------------------------------------------ */
 
-    BENCH_BEGIN("Deoxys-I-256 (deoxysi256)")
-    BENCH_WARMUP(deoxys_aead_encrypt(NULL, 0, plaintext, 16,
-                                     key_32, nonce_8, ct, &ct_len))
-    BENCH_MEASURE(deoxys_aead_encrypt(NULL, 0, plaintext, 16,
-                                      key_32, nonce_8, ct, &ct_len))
-    sink ^= ct[0];
+static void bench_skinny128_256(void)
+{
+    uint8_t output[16];
+    skinny_128_256_key_schedule_t ks;
+    skinny_128_256_init(&ks, key_32);
+
+    BENCH_BEGIN("SKINNY-128-256")
+    BENCH_WARMUP(skinny_128_256_encrypt(&ks, output, plaintext))
+    BENCH_MEASURE(skinny_128_256_encrypt(&ks, output, plaintext))
+    sink ^= output[0];
     BENCH_END();
 }
 
-static void bench_deoxysI128(void)
+static void bench_forkskinny128_256_1leg(void)
 {
-    uint8_t ct[32];
-    size_t  ct_len = 0;
+    uint8_t out_right[16];
 
-    BENCH_BEGIN("Deoxys-I-128 (deoxysi)")
-    BENCH_WARMUP(deoxys_I_aead_encrypt_128(plaintext, 16,
-                                           key_16, nonce_8, ct, &ct_len))
-    BENCH_MEASURE(deoxys_I_aead_encrypt_128(plaintext, 16,
-                                            key_16, nonce_8, ct, &ct_len))
-    sink ^= ct[0];
+    BENCH_BEGIN("ForkSkinny-128-256 1-leg")
+    BENCH_WARMUP(forkskinny_128_256_encrypt(key_32, NULL, out_right, plaintext))
+    BENCH_MEASURE(forkskinny_128_256_encrypt(key_32, NULL, out_right, plaintext))
+    sink ^= out_right[0];
     BENCH_END();
 }
 
-static void bench_deoxysI128_ref(void)
+static void bench_forkskinny128_256_2leg(void)
 {
-    uint8_t ct[32];
-    size_t  ct_len = 0;
+    uint8_t out_left[16], out_right[16];
 
-    BENCH_BEGIN("Deoxys-I-128 (deoxysi128/ref)")
-    BENCH_WARMUP(deoxys128_ref_aead_encrypt(NULL, 0, plaintext, 16,
-                                            key_16, nonce_8, ct, &ct_len))
-    BENCH_MEASURE(deoxys128_ref_aead_encrypt(NULL, 0, plaintext, 16,
-                                             key_16, nonce_8, ct, &ct_len))
-    sink ^= ct[0];
+    BENCH_BEGIN("ForkSkinny-128-256 2-leg")
+    BENCH_WARMUP(forkskinny_128_256_encrypt(key_32, out_left, out_right, plaintext))
+    BENCH_MEASURE(forkskinny_128_256_encrypt(key_32, out_left, out_right, plaintext))
+    sink ^= out_left[0] ^ out_right[0];
+    BENCH_END();
+}
+
+static void bench_deoxysbc(void)
+{
+    uint8_t output[16];
+    uint8_t tk[32];
+    memcpy(tk, key_32, 32);
+
+    BENCH_BEGIN("Deoxys-BC")
+    BENCH_WARMUP(aesTweakEncrypt_deoxysi128_ref(256, plaintext, tk, output))
+    BENCH_MEASURE(aesTweakEncrypt_deoxysi128_ref(256, plaintext, tk, output))
+    sink ^= output[0];
+    BENCH_END();
+}
+
+static void bench_deoxysbc_opt_full(void)
+{
+    uint8_t output[16];
+
+    BENCH_BEGIN("Deoxys-BC opt (full)")
+    BENCH_WARMUP(deoxysbc256_encrypt_full(key_32, plaintext, output))
+    BENCH_MEASURE(deoxysbc256_encrypt_full(key_32, plaintext, output))
+    sink ^= output[0];
+    BENCH_END();
+}
+
+static void bench_deoxysbc_opt_pre(void)
+{
+    uint8_t output[16];
+    deoxysbc256_ctx_t ctx;
+    deoxysbc256_precompute_tk1(&ctx, key_32);
+
+    BENCH_BEGIN("Deoxys-BC opt (pre TK1)")
+    BENCH_WARMUP(deoxysbc256_encrypt(&ctx, key_32 + 16, plaintext, output))
+    BENCH_MEASURE(deoxysbc256_encrypt(&ctx, key_32 + 16, plaintext, output))
+    sink ^= output[0];
+    BENCH_END();
+}
+
+static void bench_butterknife256(uint8_t num_branches, const char *label)
+{
+    uint8_t output[16];
+    uint32_t rtk[4 * 16];
+    butterknife_256_precompute_rtk(key_32, rtk, num_branches);
+
+    BENCH_BEGIN(label)
+    BENCH_WARMUP(butterknife_256_encrypt_w_rtk(rtk, output, plaintext, num_branches))
+    BENCH_MEASURE(butterknife_256_encrypt_w_rtk(rtk, output, plaintext, num_branches))
+    sink ^= output[0];
+    BENCH_END();
+}
+
+static void bench_aes128(void)
+{
+    uint8_t output[16];
+    mbedtls_aes_context ctx;
+    mbedtls_aes_init(&ctx);
+    mbedtls_aes_setkey_enc(&ctx, key_16, 128);
+
+    BENCH_BEGIN("AES-128")
+    BENCH_WARMUP(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
+    BENCH_MEASURE(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
+    sink ^= output[0];
+    BENCH_END();
+
+    mbedtls_aes_free(&ctx);
+}
+
+static void bench_aes256(void)
+{
+    uint8_t output[16];
+    mbedtls_aes_context ctx;
+    mbedtls_aes_init(&ctx);
+    mbedtls_aes_setkey_enc(&ctx, key_32, 256);
+
+    BENCH_BEGIN("AES-256")
+    BENCH_WARMUP(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
+    BENCH_MEASURE(mbedtls_aes_crypt_ecb(&ctx, MBEDTLS_AES_ENCRYPT, plaintext, output))
+    sink ^= output[0];
+    BENCH_END();
+
+    mbedtls_aes_free(&ctx);
+}
+
+static void bench_rijndael256(void)
+{
+    uint8_t output[32];
+    rijndael256_ctx_t ctx;
+    rijndael256_set_key(&ctx, key_32);
+
+    BENCH_BEGIN("Rijndael-256")
+    BENCH_WARMUP(rijndael256_encrypt(&ctx, plaintext_32, output))
+    BENCH_MEASURE(rijndael256_encrypt(&ctx, plaintext_32, output))
+    sink ^= output[0];
     BENCH_END();
 }
 
@@ -372,11 +356,9 @@ int main(void)
     bench_skinny128_256();
     bench_forkskinny128_256_1leg();
     bench_forkskinny128_256_2leg();
-    bench_deoxysbc128();
-    bench_deoxysbc256();
-    bench_deoxysI256();
-    bench_deoxysI128();
-    bench_deoxysI128_ref();
+    bench_deoxysbc();
+    bench_deoxysbc_opt_full();
+    bench_deoxysbc_opt_pre();
     bench_butterknife256(1, "Butterknife-256 1-leg");
     bench_butterknife256(7, "Butterknife-256 7-leg");
     bench_butterknife256(8, "Butterknife-256 8-leg");
