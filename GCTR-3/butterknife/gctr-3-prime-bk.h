@@ -7,7 +7,7 @@
 #define GCTR3P_BK_N         16u
 #define GCTR3P_BK_TWO_N     32u
 #define GCTR3P_BK_KEY_LEN   16u
-#define GCTR3P_BK_BRANCHES   2u   /* 2 branches = 32 bytes per call */
+#define GCTR3P_BK_BRANCHES   8u   /* 8 branches = 128 bytes per call (matches BUTTERKNIFE_MAX_BRANCHES) */
 
 /*
  * GCTR'-2-3 over ButterKnife, using:

@@ -7,7 +7,7 @@
 #include "include/supersonic.h"
 
 /* ── call counters ─────────────────────────────────────────── */
-static uint32_t cnt_1leg;  /* DeoxysBC 1-leg calls  */
+static uint32_t cnt_1leg;  /* Butterknife 1-leg calls */
 static uint32_t cnt_2leg;  /* Butterknife 2-leg calls */
 
 void supersonic_bk_reset_counters(void)
@@ -47,8 +47,8 @@ static void supersonic_256_round(Sonics_256_struct_t *Sonic, SonicChains *Chains
     /* Set counter into 12 bit but keeps last 4 empty*/
     Sonic->P[SONICS_256_P_SIZE - 1] = (uint8_t)((Nr+1)&0xff);        //tweak-block
     Sonic->P[SONICS_256_P_SIZE    ] = (uint8_t)(((Nr+1)&0x0f00)>>4);
-    butterknife_256_precompute_rtk(Sonic->P + SONICS_256_N_SIZE, Sonic->bk_rtk, 0);
-    deoxysBC_256_encrypt_w_rtk(Sonic->bk_rtk, buffer, Sonic->P);
+    butterknife_256_precompute_rtk(Sonic->P + SONICS_256_N_SIZE, Sonic->bk_rtk, 1);
+    butterknife_256_encrypt_w_rtk(Sonic->bk_rtk, buffer, Sonic->P, 1);
     cnt_1leg++;
 
     arrXOR(Chains->m,  buffer, SONICS_256_N_SIZE); //m-Chain

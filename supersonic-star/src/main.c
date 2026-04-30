@@ -77,12 +77,12 @@ static void print_counters(const char *name1, uint32_t c1,
                            const char *name2, uint32_t c2)
 {
     uint32_t l1 = c1 / TOTAL_ITERS;
-    uint32_t l2 = 2u * c2 / TOTAL_ITERS;
+    uint32_t l2 = c2 / TOTAL_ITERS;
     if (l2 > 0)
-        printk("    [legs/op] %s=%" PRIu32 "  %s=%" PRIu32 "\n",
+        printk("    [calls/op] %s=%" PRIu32 "  %s=%" PRIu32 "\n",
                name1, l1, name2, l2);
     else
-        printk("    [legs/op] %s=%" PRIu32 "\n",
+        printk("    [calls/op] %s=%" PRIu32 "\n",
                name1, l1);
 }
 
@@ -91,12 +91,11 @@ static void print_variant(const char *name, uint32_t mlen,
                           uint32_t oneleg, uint32_t twoleg)
 {
     uint32_t legs_per_op = (oneleg + 2u * twoleg) / TOTAL_ITERS;
-    uint64_t denom = (uint64_t)legs_per_op * BENCH_ITERS;
 
-    printk("  %-26s %6u B : %12" PRIu64 " cyc/leg | %12" PRIu64 " ns/leg  [%u legs/op]\n",
+    printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns  [%u legs/op]\n",
            name, mlen,
-           denom > 0u ? total_cycles / denom : 0u,
-           denom > 0u ? total_ns     / denom : 0u,
+           total_cycles / BENCH_ITERS,
+           total_ns     / BENCH_ITERS,
            legs_per_op);
 }
 
@@ -111,7 +110,7 @@ static void bench_size(uint32_t mlen)
     bench_supersonic_star_variant(supersonic_256_star, mlen, &cyc, &ns);
     supersonic_fs256_star_get_counters(&oneleg, &twoleg);
     print_variant("supersonic_256_forkskinny", mlen, cyc, ns, oneleg, twoleg);
-    print_counters("skinny_r32", oneleg, "forkskinny_256", twoleg);
+    print_counters("skinny", oneleg, "forkskinny_256", twoleg);
 
     supersonic_fs_star_reset_counters();
     bench_supersonic_star_variant(supersonic_384_star, mlen, &cyc, &ns);
@@ -135,7 +134,7 @@ static void bench_size(uint32_t mlen)
     bench_supersonic_star_variant(supersonic_256_butterknife_skinny, mlen, &cyc, &ns);
     supersonic_bk_skinny_get_counters(&oneleg, &twoleg);
     print_variant("supersonic_256_bk_skinny", mlen, cyc, ns, oneleg, twoleg);
-    print_counters("skinny_r32", oneleg, "butterknife", twoleg);
+    print_counters("skinny", oneleg, "butterknife", twoleg);
 }
 
 int main(void)
@@ -145,7 +144,7 @@ int main(void)
 
     printk("\n=== Supersonic Star Benchmark (Deoxys / Butterknife / Skinny) ===\n");
     printk("iters=%d, warmup=%d\n", BENCH_ITERS, WARMUP_ITERS);
-    printk("format: <variant> <size> : <cyc/leg> | <ns/leg>  [legs/op]\n");
+    printk("format: <variant> <size> : <avg cycles> | <avg ns>  [legs/op]\n");
 
     bench_size(8);
     bench_size(100);

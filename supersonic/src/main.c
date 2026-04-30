@@ -65,10 +65,10 @@ static void print_counters(const char *name1, uint32_t c1,
                            const char *name2, uint32_t c2)
 {
     if (c2 > 0)
-        printk("    [prim/op] %s=%" PRIu32 "  %s=%" PRIu32 "\n",
+        printk("    [leg/op] %s=%" PRIu32 "  %s=%" PRIu32 "\n",
                name1, c1 / TOTAL_ITERS, name2, c2 / TOTAL_ITERS);
     else
-        printk("    [prim/op] %s=%" PRIu32 "\n",
+        printk("    [leg/op] %s=%" PRIu32 "\n",
                name1, c1 / TOTAL_ITERS);
 }
 
@@ -139,7 +139,11 @@ static void bench_gctr_variants(uint32_t mlen)
     printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
            "gctr3_forkskinny", mlen,
            total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
-    print_counters("fs_enc", g_fs128_256_enc_calls, "fs_dec", g_fs128_256_dec_calls);
+    printk("    [leg/op] legs=%" PRIu32 "  (1-leg=%" PRIu32 "  2-leg=%" PRIu32 ")\n",
+           g_fs128_256_legs       / TOTAL_ITERS,
+           g_fs128_256_1leg_calls / TOTAL_ITERS,
+           g_fs128_256_2leg_calls / TOTAL_ITERS);
+    k_msleep(1);
 
     /* gctr3_butterknife */
     total_cycles = 0; total_ns = 0;
@@ -159,6 +163,7 @@ static void bench_gctr_variants(uint32_t mlen)
            "gctr3_butterknife", mlen,
            total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
     print_counters("butterknife", g_butterknife_256_enc_calls, "", 0);
+    k_msleep(1);
 
     /* gctr3_prime_forkskinny */
     total_cycles = 0; total_ns = 0;
@@ -177,7 +182,11 @@ static void bench_gctr_variants(uint32_t mlen)
     printk("  %-26s %6u B : %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
            "gctr3_prime_forkskinny", mlen,
            total_cycles / BENCH_ITERS, total_ns / BENCH_ITERS);
-    print_counters("fs_enc", g_fs128_256_enc_calls, "fs_dec", g_fs128_256_dec_calls);
+    printk("    [leg/op] legs=%" PRIu32 "  (1-leg=%" PRIu32 "  2-leg=%" PRIu32 ")\n",
+           g_fs128_256_legs       / TOTAL_ITERS,
+           g_fs128_256_1leg_calls / TOTAL_ITERS,
+           g_fs128_256_2leg_calls / TOTAL_ITERS);
+    k_msleep(1);
 
     /* gctr3_prime_butterknife */
     total_cycles = 0; total_ns = 0;
@@ -205,14 +214,22 @@ static void bench_size(uint32_t mlen)
 
     printk("\n[Message size: %u bytes]\n", mlen);
 
+    forkskinny_counters_reset();
+    bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
+    printk("    [leg/op] legs=%" PRIu32 "  (1-leg=%" PRIu32 "  2-leg=%" PRIu32 ")\n",
+           g_fs128_256_legs       / TOTAL_ITERS,
+           g_fs128_256_1leg_calls / TOTAL_ITERS,
+           g_fs128_256_2leg_calls / TOTAL_ITERS);
+    k_msleep(1);
+
     supersonic_bk_reset_counters();
     bench_supersonic_variant("supersonic_256_butterknife", supersonic_256_butterknife, mlen);
     supersonic_bk_get_counters(&c1leg, &c2leg);
-    print_counters("deoxysBC", c1leg, "butterknife", c2leg);
-
-    forkskinny_counters_reset();
-    bench_supersonic_variant("supersonic_256_forkskinny", supersonic_256_forkskinny, mlen);
-    print_counters("fs_enc", g_fs128_256_enc_calls, "fs_dec", g_fs128_256_dec_calls);
+    printk("    [leg/op] legs=%" PRIu32 "  (1-leg=%" PRIu32 "  2-leg=%" PRIu32 ")\n",
+           (c1leg + 2u * c2leg) / TOTAL_ITERS,
+           c1leg / TOTAL_ITERS,
+           c2leg / TOTAL_ITERS);
+    k_msleep(1);
 
     bench_gctr_variants(mlen);
 }

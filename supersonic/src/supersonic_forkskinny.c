@@ -251,3 +251,11 @@ void supersonic_192_forkskinny(const uint8_t key[16],
     forkskinny_64_192_init_tks_tweakpart(Sonic.fs_tks2, Chains.kt + SONICS_192_K_SIZE, FORKSKINNY_64_192_ROUNDS_BEFORE + 2*FORKSKINNY_64_192_ROUNDS_AFTER);
     forkskinny_64_192_encrypt_with_tks(Sonic.fs_tks1, Sonic.fs_tks2, out_left, out_right, Chains.m);
 }
+
+void forkskinny_supersonic_tag(const uint8_t key[16],
+                               const uint8_t *message,
+                               uint32_t message_len,
+                               uint8_t tag[32])
+{
+    supersonic_256_forkskinny(key, tag, tag + 16, message, message_len);
+}

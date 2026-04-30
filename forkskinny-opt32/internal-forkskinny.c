@@ -26,8 +26,11 @@
 #include <stddef.h>
 
 /* ── primitive call counters ─────────────────────────────── */
-uint32_t g_fs128_256_enc_calls = 0;
-uint32_t g_fs128_256_dec_calls = 0;
+uint32_t g_fs128_256_enc_calls  = 0;
+uint32_t g_fs128_256_dec_calls  = 0;
+uint32_t g_fs128_256_legs       = 0;
+uint32_t g_fs128_256_1leg_calls = 0;
+uint32_t g_fs128_256_2leg_calls = 0;
 uint32_t g_fs128_384_enc_calls = 0;
 uint32_t g_fs128_384_dec_calls = 0;
 uint32_t g_fs64_192_enc_calls  = 0;
@@ -35,8 +38,11 @@ uint32_t g_fs64_192_dec_calls  = 0;
 
 void forkskinny_counters_reset(void)
 {
-    g_fs128_256_enc_calls = 0;
-    g_fs128_256_dec_calls = 0;
+    g_fs128_256_enc_calls  = 0;
+    g_fs128_256_dec_calls  = 0;
+    g_fs128_256_legs       = 0;
+    g_fs128_256_1leg_calls = 0;
+    g_fs128_256_2leg_calls = 0;
     g_fs128_384_enc_calls = 0;
     g_fs128_384_dec_calls = 0;
     g_fs64_192_enc_calls  = 0;
@@ -624,6 +630,8 @@ void forkskinny_128_256_encrypt_with_tks
         const unsigned char *input)
 {
     ++g_fs128_256_enc_calls;
+    if (output_left != NULL && output_right != NULL) { ++g_fs128_256_2leg_calls; g_fs128_256_legs += 2u; }
+    else                                            { ++g_fs128_256_1leg_calls; g_fs128_256_legs += 1u; }
     forkskinny_128_256_state_t state;
 
     /* Unpack the input */
