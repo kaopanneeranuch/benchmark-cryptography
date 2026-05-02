@@ -7,14 +7,6 @@
 #include "internal-forkskinny.h"
 #include "skinny.h"
 
-/*
- * supersonic_star:
- *   - 256, 192: 1-leg absorb rounds use reduced-round SKINNY
- *   - precompute and final tag generation stay ForkSkinny
- *   - 384 stays pure ForkSkinny because skinny.h here has no 128-384 API
- *
- */
-
 #define SUPERSONIC_STAR_256_ROUNDS 48u
 #define SUPERSONIC_STAR_192_ROUNDS 40u
 
@@ -75,10 +67,6 @@ static void arrDOUBLE_64(uint8_t out[8])
     out[0] ^= 0x1b * tmp;
 }
 
-/* ------------------------------------------------------------------------- */
-/* Reduced-round SKINNY one-leg helpers                                      */
-/* ------------------------------------------------------------------------- */
-
 static void skinny_128_256_oneleg_star(uint8_t out[16],
                                        const uint8_t input[16],
                                        const uint8_t key_part[16],
@@ -131,10 +119,6 @@ static void skinny_64_192_oneleg_star(uint8_t out[8],
     le_store_word16(out + 6, state.S[3]);
 }
 
-/* ------------------------------------------------------------------------- */
-/* 384: keep original ForkSkinny absorb round                                */
-/* ------------------------------------------------------------------------- */
-
 static void supersonic_384_round_fork(Sonics_384_struct_t *Sonic,
                                       SonicChains *Chains,
                                       uint8_t buffer[SONICS_384_K_SIZE + SONICS_384_T_SIZE + 1],
@@ -171,10 +155,6 @@ static void supersonic_384_round_fork(Sonics_384_struct_t *Sonic,
     arrXOR(Chains->kt + SONICS_384_K_SIZE, buffer, SONICS_384_T_SIZE);
 }
 
-/* ------------------------------------------------------------------------- */
-/* 256 star: reduced-round SKINNY in absorb loop                             */
-/* ------------------------------------------------------------------------- */
-
 static void supersonic_256_round_star(Sonics_256_struct_t *Sonic,
                                       SonicChains *Chains,
                                       uint8_t buffer[SONICS_256_N_SIZE],
@@ -200,10 +180,6 @@ static void supersonic_256_round_star(Sonics_256_struct_t *Sonic,
     arrXOR(Chains->kt + SONICS_256_K_SIZE, buffer, SONICS_256_T_SIZE);
 }
 
-/* ------------------------------------------------------------------------- */
-/* 192 star: reduced-round SKINNY in absorb loop                             */
-/* ------------------------------------------------------------------------- */
-
 static void supersonic_192_round_star(Sonics_192_struct_t *Sonic,
                                       SonicChains *Chains,
                                       uint8_t buffer[SONICS_192_N_SIZE],
@@ -228,10 +204,6 @@ static void supersonic_192_round_star(Sonics_192_struct_t *Sonic,
     arrXOR(buffer, Sonic->P + SONICS_192_N_SIZE + SONICS_192_K_SIZE, SONICS_192_T_SIZE);
     arrXOR(Chains->kt + SONICS_192_K_SIZE, buffer, SONICS_192_T_SIZE);
 }
-
-/* ------------------------------------------------------------------------- */
-/* 384 star = pure ForkSkinny, because skinny.h here has no 128-384 API      */
-/* ------------------------------------------------------------------------- */
 
 void supersonic_384_star(const uint8_t key[16],
                          uint8_t out_left[16], uint8_t out_right[16],
@@ -309,10 +281,6 @@ void supersonic_384_star(const uint8_t key[16],
     cnt_384_2leg++;
 }
 
-/* ------------------------------------------------------------------------- */
-/* 256 star                                                                   */
-/* ------------------------------------------------------------------------- */
-
 void supersonic_256_star(const uint8_t key[16],
                          uint8_t out_left[16], uint8_t out_right[16],
                          const uint8_t *message, const uint32_t mlen)
@@ -379,10 +347,6 @@ void supersonic_256_star(const uint8_t key[16],
     );
     cnt_256_2leg++;
 }
-
-/* ------------------------------------------------------------------------- */
-/* 192 star                                                                   */
-/* ------------------------------------------------------------------------- */
 
 void supersonic_192_star(const uint8_t key[16],
                          uint8_t out_left[8], uint8_t out_right[8],

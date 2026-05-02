@@ -156,10 +156,6 @@ static void supersonic_256_butterknife_core(
     memcpy(out_right, buffer + 16, SONICS_256_N_SIZE);
 }
 
-/* ------------------------------------------------------------------------- */
-/* Public entry points                                                       */
-/* ------------------------------------------------------------------------- */
-
 void supersonic_256_butterknife_deoxys_opt(const uint8_t key[16],
                                            uint8_t out_left[16],
                                            uint8_t out_right[16],

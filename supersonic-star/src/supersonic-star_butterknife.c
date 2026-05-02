@@ -42,7 +42,7 @@ static void arrDOUBLE_128(uint8_t out[16])
 }
 
 /* ------------------------------------------------------------------------- */
-/* Deoxys-I-128 one-leg helper: Deoxys-BC-256, 2 TK words, 14 rounds       */
+/* Deoxys-I-128 one-leg helper: 2 TK words, 14 rounds       */
 /* ------------------------------------------------------------------------- */
 
 static void deoxysBC_256_encrypt_1leg(const uint8_t tk[32],
@@ -52,10 +52,6 @@ static void deoxysBC_256_encrypt_1leg(const uint8_t tk[32],
     aesTweakEncrypt(256, in, tk, out);
     cnt_1leg++;
 }
-
-/* ------------------------------------------------------------------------- */
-/* Shared per-round logic                                                    */
-/* ------------------------------------------------------------------------- */
 
 static void supersonic_256_round_core(Sonics_256_struct_t *Sonic,
                                       SonicChains *Chains,
@@ -81,10 +77,6 @@ static void supersonic_256_round_core(Sonics_256_struct_t *Sonic,
     arrXOR(buffer, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, SONICS_256_T_SIZE);
     arrXOR(Chains->kt + SONICS_256_K_SIZE, buffer, SONICS_256_T_SIZE);
 }
-
-/* ------------------------------------------------------------------------- */
-/* Shared driver                                                             */
-/* ------------------------------------------------------------------------- */
 
 static void supersonic_256_butterknife_core(
     const uint8_t key[16],
@@ -155,10 +147,6 @@ static void supersonic_256_butterknife_core(
     memcpy(out_left,  buffer,     SONICS_256_N_SIZE);
     memcpy(out_right, buffer + 16, SONICS_256_N_SIZE);
 }
-
-/* ------------------------------------------------------------------------- */
-/* Public entry points                                                       */
-/* ------------------------------------------------------------------------- */
 
 void supersonic_256_butterknife_deoxys(const uint8_t key[16],
                                        uint8_t out_left[16],

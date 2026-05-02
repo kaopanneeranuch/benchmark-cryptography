@@ -44,7 +44,7 @@ static void arrDOUBLE_128(uint8_t out[16])
 }
 
 /* ------------------------------------------------------------------------- */
-/* Deoxys-BC-256 style one-leg helpers                                       */
+/* one-leg helpers                                       */
 /* ------------------------------------------------------------------------- */
 
 /*
@@ -67,7 +67,7 @@ static void deoxysBC_256_encrypt_exact(const uint8_t tk[32],
 
 /*
  * STAR helper:
- * same Deoxys-BC-256 style structure, but reduced rounds for speed testing.
+ * same but reduced rounds for speed testing.
  */
 static void deoxysBC_256_encrypt_star(const uint8_t tk[32],
                                       uint8_t out[16],
@@ -92,10 +92,6 @@ static void deoxysBC_256_encrypt_star(const uint8_t tk[32],
     le_store_word32(out + 8,  state.S[2]);
     le_store_word32(out + 12, state.S[3]);
 }
-
-/* ------------------------------------------------------------------------- */
-/* Shared per-round logic                                                    */
-/* ------------------------------------------------------------------------- */
 
 static void supersonic_256_round_exact(Sonics_256_struct_t *Sonic,
                                        SonicChains *Chains,
@@ -156,10 +152,6 @@ static void supersonic_256_round_star(Sonics_256_struct_t *Sonic,
     arrXOR(buffer, Sonic->P + SONICS_256_N_SIZE + SONICS_256_K_SIZE, SONICS_256_T_SIZE); /* t-chain */
     arrXOR(Chains->kt + SONICS_256_K_SIZE, buffer, SONICS_256_T_SIZE);
 }
-
-/* ------------------------------------------------------------------------- */
-/* Shared driver                                                             */
-/* ------------------------------------------------------------------------- */
 
 static void supersonic_256_butterknife_core(
     const uint8_t key[16],
@@ -239,10 +231,6 @@ static void supersonic_256_butterknife_core(
     memcpy(out_left,  buffer,     SONICS_256_N_SIZE);
     memcpy(out_right, buffer + 16, SONICS_256_N_SIZE);
 }
-
-/* ------------------------------------------------------------------------- */
-/* Public entry points                                                       */
-/* ------------------------------------------------------------------------- */
 
 void supersonic_256_butterknife_skinny(const uint8_t key[16],
                                        uint8_t out_left[16],
