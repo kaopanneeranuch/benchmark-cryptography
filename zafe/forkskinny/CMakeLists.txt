@@ -15,6 +15,7 @@ target_sources(app PRIVATE
 	src/main.c
 	src/bench.c
 	src/forkskinny_zafe.c
+	src/forkskinny_zafe_opt.c
 	src/stm32wrapper_zephyr.c
 	../../GCTR-3/forkskinny/fenc.c
 	../../forkskinny-opt32/internal-forkskinny.c

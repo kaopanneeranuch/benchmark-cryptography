@@ -7,5 +7,9 @@ int main(void)
 {
     printk("\n=== ForkSkinny-ZAFE AEAD Benchmark ===\n\n");
     bench_zafe_all();
+
+    printk("\n=== ForkSkinny-ZAFE-OPT AEAD Benchmark ===\n\n");
+    bench_zafe_opt_all();
+
     return 0;
 }

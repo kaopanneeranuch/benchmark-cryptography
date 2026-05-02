@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "forkskinny_zafe.h"
+#include "forkskinny_zafe_opt.h"
 #include "bench.h"
 #include "internal-forkskinny.h"
 
@@ -332,6 +333,239 @@ void bench_zafe_all(void)
     bench_encrypt();
     bench_decrypt();
     bench_verify();
+
+    timing_stop();
+
+    printk("--- Benchmark complete ---\n\n");
+}
+
+/* ── OPT variants ──────────────────────────────────────── */
+
+void verify_correctness_opt(void)
+{
+    int rc;
+
+    printk("--- ForkSkinny ZAFE-OPT Correctness (msg=%d ad=%d) ---\n",
+           MESSAGE_LEN, AD_LEN);
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+
+    memcpy(ks.enc_key, bench_key, ZAFE_ENC_KEY_LEN);
+    memcpy(ks.mac_key, bench_key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
+
+    rc = forkskinny_zafe_opt_encrypt_auth(&ks,
+                                          ad_buf, AD_LEN,
+                                          pt_buf, MESSAGE_LEN,
+                                          ct_buf, tag_buf);
+
+    printk("Encrypt+Auth:   %s\n", rc == 0 ? "OK" : "FAIL");
+    if (rc != 0) {
+        printk("--- End correctness ---\n\n");
+        return;
+    }
+
+    print_hex("PT[0..15]: ", pt_buf, 16);
+    print_hex("CT[0..15]: ", ct_buf, 16);
+    print_hex("TAG:       ", tag_buf, ZAFE_TAG_LEN);
+
+    rc = forkskinny_zafe_opt_decrypt_verify(&ks,
+                                            ad_buf, AD_LEN,
+                                            ct_buf, MESSAGE_LEN,
+                                            tag_buf, dec_buf);
+
+    print_hex("DEC[0..15]: ", dec_buf, 16);
+    printk("Decrypt+Verify: %s\n", rc == 0 ? "OK" : "FAIL");
+
+    if (rc == 0 && memcmp(pt_buf, dec_buf, MESSAGE_LEN) == 0) {
+        printk("Plaintext match: OK\n");
+    } else {
+        printk("Plaintext match: FAIL\n");
+    }
+
+    printk("--- End correctness ---\n\n");
+}
+
+static void bench_hash_opt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+    memcpy(ks.enc_key, bench_key, ZAFE_ENC_KEY_LEN);
+    memcpy(ks.mac_key, bench_key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
+
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        (void)forkskinny_zafe_opt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+
+    forkskinny_counters_reset();
+    (void)forkskinny_zafe_opt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
+
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        (void)forkskinny_zafe_opt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        start = timing_counter_get();
+        (void)forkskinny_zafe_opt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "hash (tag)",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
+}
+
+static void bench_encrypt_opt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+    memcpy(ks.enc_key, bench_key, ZAFE_ENC_KEY_LEN);
+    memcpy(ks.mac_key, bench_key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
+
+    (void)forkskinny_zafe_opt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+
+    {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_counters_reset();
+        forkskinny_zafe_opt_encrypt(&ks, tag_local, pt_buf, MESSAGE_LEN, ct_buf);
+    }
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_zafe_opt_encrypt(&ks, tag_local, pt_buf, MESSAGE_LEN, ct_buf);
+    }
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        start = timing_counter_get();
+        forkskinny_zafe_opt_encrypt(&ks, tag_local, pt_buf, MESSAGE_LEN, ct_buf);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "encrypt",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
+}
+
+static void bench_decrypt_opt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+    memcpy(ks.enc_key, bench_key, ZAFE_ENC_KEY_LEN);
+    memcpy(ks.mac_key, bench_key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
+
+    (void)forkskinny_zafe_opt_encrypt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
+
+    {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_counters_reset();
+        forkskinny_zafe_opt_decrypt(&ks, tag_local, ct_buf, MESSAGE_LEN, dec_buf);
+    }
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
+
+    for (int i = 0; i < WARMUP_ITERS; i++) {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        forkskinny_zafe_opt_decrypt(&ks, tag_local, ct_buf, MESSAGE_LEN, dec_buf);
+    }
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        uint8_t tag_local[ZAFE_TAG_LEN];
+        memcpy(tag_local, tag_buf, ZAFE_TAG_LEN);
+        start = timing_counter_get();
+        forkskinny_zafe_opt_decrypt(&ks, tag_local, ct_buf, MESSAGE_LEN, dec_buf);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "decrypt",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
+}
+
+static void bench_verify_opt(void)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+
+    fill_pattern(pt_buf, MESSAGE_LEN);
+    fill_pattern(ad_buf, AD_LEN);
+    memcpy(ks.enc_key, bench_key, ZAFE_ENC_KEY_LEN);
+    memcpy(ks.mac_key, bench_key + ZAFE_ENC_KEY_LEN, ZAFE_MAC_KEY_LEN);
+
+    (void)forkskinny_zafe_opt_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+
+    forkskinny_counters_reset();
+    (void)forkskinny_zafe_opt_verify(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+    uint32_t enc_per_op = g_fs128_256_enc_calls;
+    uint32_t dec_per_op = g_fs128_256_dec_calls;
+
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        (void)forkskinny_zafe_opt_verify(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        start = timing_counter_get();
+        (void)forkskinny_zafe_opt_verify(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c  += c;
+        total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-14s: %10llu cycles  |  %10llu ns\n", "verify",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS));
+    printk("    [prim/op] FS-128-256: enc=%lu dec=%lu\n",
+           (unsigned long)enc_per_op, (unsigned long)dec_per_op);
+}
+
+void bench_zafe_opt_all(void)
+{
+    timing_init();
+    timing_start();
+
+    printk("[FORKSKINNY ZAFE-OPT] Benchmark  msg=%d ad=%d iters=%d\n",
+           MESSAGE_LEN, AD_LEN, BENCH_ITERS);
+    printk("  sizes:  key=%d  nonce=none  tag=%d  pt=%d  ct=%d  ad=%d  (bytes)\n",
+           ZAFE_KEY_LEN, ZAFE_TAG_LEN, MESSAGE_LEN, MESSAGE_LEN, AD_LEN);
+    printk("  %-14s  %10s  %12s\n", "operation", "cycles", "ns");
+
+    verify_correctness_opt();
+
+    bench_hash_opt();
+    bench_encrypt_opt();
+    bench_decrypt_opt();
+    bench_verify_opt();
 
     timing_stop();
 
