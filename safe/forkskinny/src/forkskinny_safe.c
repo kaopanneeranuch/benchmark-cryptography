@@ -29,9 +29,7 @@ static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
     return diff == 0;
 }
 
-/* ------------------------------------------------------------------------- */
-/* GF(2^256) multiplication                                                  */
-/* ------------------------------------------------------------------------- */
+// GF(2^256) multiplication
 
 static void xor32(uint8_t dst[32], const uint8_t src[32])
 {
@@ -77,9 +75,7 @@ static void gf_mul(uint8_t out[32], const uint8_t a[32], const uint8_t b[32])
     memcpy(out, z, 32);
 }
 
-/* ------------------------------------------------------------------------- */
-/* Pad10 + length encoding                                                   */
-/* ------------------------------------------------------------------------- */
+// Pad10 + length encoding
 
 static size_t pad10_len(size_t len)
 {
@@ -120,9 +116,7 @@ static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
     }
 }
 
-/* ------------------------------------------------------------------------- */
-/* SAFE bit handling                                                         */
-/* ------------------------------------------------------------------------- */
+// SAFE bit handling
 
 /* Shift a 128-bit big-endian value right by 1 bit. */
 static void be128_rshift1(uint8_t x[16])
@@ -135,16 +129,7 @@ static void be128_rshift1(uint8_t x[16])
     }
 }
 
-/* For n=128, t=127:
- * U = first 128 bits
- * V = next 127 bits
- *
- * Internal V representation:
- *   bit 127 reserved for domain bit
- *   bits 126..0 hold the actual V
- */
-
-/* Build tweak = b || V_rep and append key for ForkSkinny-128-256. */
+/* Build tweak = b || V_rep and append key */
 static void make_tk(uint8_t tk[32],
                     const uint8_t key[KEY_LEN],
                     uint8_t domain_bit,
@@ -191,9 +176,7 @@ static void safe_iv_from_tag(const uint8_t tag[SAFE_TAG_LEN],
     ct_memzero(V, sizeof(V));
 }
 
-/* ------------------------------------------------------------------------- */
-/* SFMac                                                                     */
-/* ------------------------------------------------------------------------- */
+// SFMac
 
 int sfmac(const uint8_t key[KEY_LEN],
           const uint8_t *ad, size_t ad_len,
@@ -285,16 +268,6 @@ int sfmac(const uint8_t key[KEY_LEN],
 
     return 0;
 }
-
-/* sfmac16 removed (full 16-byte design implemented in sfmac) */
-
-/* ------------------------------------------------------------------------- */
-/* public API                                                                */
-/* ------------------------------------------------------------------------- */
-
-/* keygen removed: callers should initialize `safe_key_t` directly (e.g. memcpy)
-   Previously this function simply copied the key into the structure.
-*/
 
 int forkskinny_safe_auth(const safe_key_t *ks,
                          const uint8_t *ad, size_t adlen,

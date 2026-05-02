@@ -21,8 +21,8 @@ void fenc(const uint8_t *key,
           uint8_t *out)
 {
     uint8_t tk[FENC_TWO_N];
-    uint8_t j_enc[FENC_N];       /* counter j = i-1, starts at 0 */
-    uint8_t block_in[FENC_N];    /* U XOR j */
+    uint8_t j_enc[FENC_N];       
+    uint8_t block_in[FENC_N];    
     size_t offset = 0;
 
     const uint8_t *U = iv;            /* first n bytes */
@@ -40,7 +40,7 @@ void fenc(const uint8_t *key,
         size_t remaining = len - offset;
         size_t take = remaining < FENC_TWO_N ? remaining : FENC_TWO_N;
 
-        /* block input = U XOR <j> (algorithm: U XOR i-1) */
+        /* block input = U XOR <j> (U XOR i-1) */
         for (int k = 0; k < FENC_N; ++k)
             block_in[k] = U[k] ^ j_enc[k];
 
@@ -54,7 +54,7 @@ void fenc(const uint8_t *key,
 
         offset += take;
 
-        /* increment counter j (big-endian) */
+        /* increment counter j */
         for (int b = FENC_N - 1; b >= 0; --b) {
             j_enc[b] = (uint8_t)(j_enc[b] + 1u);
             if (j_enc[b] != 0u)

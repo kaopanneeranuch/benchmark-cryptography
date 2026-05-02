@@ -8,18 +8,6 @@
 #define GCTR3_TWO_N   32u
 #define GCTR3_KEY_LEN 16u
 
-/*
- * GCTR-3 over ForkSkinny-128-256.
- *
- * key: 16-byte secret key
- * R:   16-byte tweak base
- * N:   16-byte fixed input block
- * in:  input buffer
- * len: input length in bytes
- * out: output buffer
- *
- * Encryption and decryption are identical.
- */
 void gctr_3_forkskinny(const uint8_t key[GCTR3_KEY_LEN],
                        const uint8_t R[GCTR3_N],
                        const uint8_t N[GCTR3_N],

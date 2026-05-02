@@ -8,13 +8,11 @@
 #include "bench.h"
 #include "internal-forkskinny.h"
 
-/* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
 #define BENCH_ITERS   100
 #define MESSAGE_LEN   100
 #define AD_LEN         0
 
-/* work buffers */
 static uint8_t pt_buf[MESSAGE_LEN];
 static uint8_t ct_buf[MESSAGE_LEN];
 static uint8_t dec_buf[MESSAGE_LEN];
@@ -53,7 +51,6 @@ static void print_hex(const char *label, const uint8_t *buf, size_t len)
     printk("\n");
 }
 
-/* ── correctness check ─────────────────────────────────── */
 void verify_correctness(void)
 {
     int rc;
@@ -64,10 +61,8 @@ void verify_correctness(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     fill_pattern(ad_buf, AD_LEN);
 
-    /* initialize key schedule */
     memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
-    /* SAFE.Enc = tag first, then FEnc */
     rc = forkskinny_safe_encrypt_auth(&ks,
                                       ad_buf, AD_LEN,
                                       pt_buf, MESSAGE_LEN,
@@ -84,7 +79,6 @@ void verify_correctness(void)
     print_hex("CT[0..15]: ", ct_buf, 16);
     print_hex("TAG:       ", tag_buf, SAFE_TAG_LEN);
 
-    /* SAFE.Dec = FEnc^-1 then verify tag */
     rc = forkskinny_safe_decrypt_verify(&ks,
                                         ad_buf, AD_LEN,
                                         ct_buf, MESSAGE_LEN,
@@ -103,7 +97,6 @@ void verify_correctness(void)
     printk("--- End correctness ---\n\n");
 }
 
-/* ── individual benchmarks ─────────────────────────────── */
 
 static void bench_hash(void)
 {
@@ -114,7 +107,6 @@ static void bench_hash(void)
     fill_pattern(ad_buf, AD_LEN);
     memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     (void)forkskinny_safe_auth(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -148,8 +140,6 @@ static void bench_hash(void)
            (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
-/* no separate 16-byte wrapper benchmark: bench_hash measures the 16-byte design */
-/* raw FEnc benchmark only */
 static void bench_encrypt(void)
 {
     timing_t start, end;
@@ -159,13 +149,11 @@ static void bench_encrypt(void)
     fill_pattern(ad_buf, AD_LEN);
     memcpy(ks.key, bench_key, SAFE_KEY_LEN);
 
-    /* precompute tag once so this bench measures only FEnc */
     (void)forkskinny_safe_auth(&ks,
                                ad_buf, AD_LEN,
                                pt_buf, MESSAGE_LEN,
                                tag_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     forkskinny_safe_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -217,7 +205,6 @@ static void bench_decrypt(void)
                             pt_buf, MESSAGE_LEN,
                             ct_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     forkskinny_safe_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -264,7 +251,6 @@ static void bench_verify(void)
                                pt_buf, MESSAGE_LEN,
                                tag_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     (void)forkskinny_safe_verify(&ks, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -297,9 +283,7 @@ static void bench_verify(void)
            (unsigned long)enc_per_op, (unsigned long)dec_per_op);
 }
 
-/* no separate 16-byte verify benchmark */
 
-/* ── top-level entry ───────────────────────────────────── */
 void bench_safe_all(void)
 {
     printk("[FORKSKINNY SAFE] Benchmark  msg=%d ad=%d iters=%d\n",

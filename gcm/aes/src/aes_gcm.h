@@ -80,4 +80,4 @@ int aes_256_gcm_decrypt_verify(const uint8_t key[AES256_KEY_LEN],
                                const uint8_t tag[AES_GCM_TAG_LEN],
                                uint8_t *pt);
 
-#endif /* AES_256_GCM_H */
+#endif

@@ -63,9 +63,6 @@ static void fs256_both(uint8_t out_left[SS_N],
 
 /*
  * One-legged ForkSkinny call for the normal SuperSonic round.
- *
- * The provided reference uses the right branch for the round update.
- * With the direct API, that means output_left = NULL and output_right = out.
  */
 static void fs256_right_only(uint8_t out[SS_N],
                              const uint8_t input[SS_N],
@@ -135,12 +132,6 @@ void supersonic_256_forkskinny(const uint8_t key[FORKSKINNY_SUPERSONIC_KEY_SIZE]
 
     ss_precompute(key, &state);
 
-    /*
-     * Match the reference structure safely:
-     *   - process all but the last chunk in the loop,
-     *   - then always process exactly one final chunk,
-     *     padded when its length is < SS_CHUNK.
-     */
     if (message_len == 0u) {
         full_before_last = 0u;
         final_len = 0u;

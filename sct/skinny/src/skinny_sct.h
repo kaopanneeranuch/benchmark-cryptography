@@ -4,17 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/*
- * Paper-faithful SCT over a 128-bit-block tweakable cipher.
- *
- * Assumptions in the .c file:
- *   - block size = 16 bytes
- *   - nonce size = 16 bytes
- *   - tag size   = 16 bytes
- *
- * Change SCT_KEY_LEN to match your SKINNY backend.
- * The default below assumes a 128-bit key.
- */
 #ifndef SCT_KEY_LEN
 #define SCT_KEY_LEN   16
 #endif

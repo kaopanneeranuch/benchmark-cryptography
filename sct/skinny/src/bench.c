@@ -7,13 +7,11 @@
 #include "bench.h"
 #include "internal-skinny128.h"
 
-/* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
 #define BENCH_ITERS   100
 #define MESSAGE_LEN   100
 #define AD_LEN         0
 
-/* work buffers */
 static uint8_t pt_buf[MESSAGE_LEN];
 static uint8_t ct_buf[MESSAGE_LEN];
 static uint8_t dec_buf[MESSAGE_LEN];
@@ -51,7 +49,6 @@ static void print_hex(const char *label, const uint8_t *buf, size_t len)
     printk("\n");
 }
 
-/* ── correctness check ─────────────────────────────────── */
 void verify_correctness(void)
 {
     printk("--- SKINNY SCT Correctness (msg=%d ad=%d) ---\n",
@@ -90,10 +87,6 @@ void verify_correctness(void)
     printk("--- End correctness ---\n\n");
 }
 
-/* ── individual benchmarks ─────────────────────────────── */
-
-    /* keygen benchmark removed; initialization is done via memcpy */
-
 static void bench_hash(void)
 {
     timing_t start, end;
@@ -109,7 +102,6 @@ static void bench_hash(void)
                         tag_buf);
     }
 
-    /* probe: one un-timed call to count primitive invocations */
     skinny_counters_reset();
     skinny_sct_hash(&ks, bench_nonce, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
     uint32_t enc_per_op = g_skinny128_256_enc_calls;
@@ -156,7 +148,6 @@ static void bench_encrypt(void)
 
     memcpy(iv, tag_buf, SCT_IV_LEN);
 
-    /* probe: one un-timed call to count primitive invocations */
     skinny_counters_reset();
     skinny_sct_ctrt(&ks, bench_nonce, iv, pt_buf, MESSAGE_LEN, ct_buf);
     uint32_t enc_per_op = g_skinny128_256_enc_calls;
@@ -199,7 +190,6 @@ static void bench_decrypt(void)
 
     memcpy(iv, tag_buf, SCT_IV_LEN);
 
-    /* probe: one un-timed call to count primitive invocations */
     skinny_counters_reset();
     skinny_sct_ctrt(&ks, bench_nonce, iv, ct_buf, MESSAGE_LEN, dec_buf);
     uint32_t enc_per_op = g_skinny128_256_enc_calls;
@@ -239,7 +229,6 @@ static void bench_verify(void)
                     pt_buf, MESSAGE_LEN,
                     tag_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     skinny_counters_reset();
     skinny_sct_verify(&ks, bench_nonce, ad_buf, AD_LEN, pt_buf, MESSAGE_LEN, tag_buf);
     uint32_t enc_per_op = g_skinny128_256_enc_calls;
@@ -270,7 +259,6 @@ static void bench_verify(void)
     printk("    [prim/op] SKINNY-128-256: enc=%lu\n", (unsigned long)enc_per_op);
 }
 
-/* ── top-level entry ───────────────────────────────────── */
 void bench_sct_all(void)
 {
     printk("[SKINNY SCT] Benchmark  msg=%d ad=%d iters=%d\n",

@@ -23,21 +23,6 @@ static void inc_be_128(uint8_t x[GCTR3_BK_N])
     }
 }
 
-/*
- * GCTR-3 shape over ButterKnife:
- *
- *   T_j = R xor <j>
- *   X_j = N
- *
- * key         : 16-byte secret key
- * R           : 16-byte tweak base
- * N           : 16-byte fixed input block
- * in / out    : input/output buffers (may overlap for in-place use)
- * len         : number of bytes to process
- * num_branches: 1..8
- *
- * Encryption and decryption are identical.
- */
 void gctr_3_butterknife(const uint8_t key[GCTR3_BK_KEY_LEN],
                         const uint8_t R[GCTR3_BK_N],
                         const uint8_t N[GCTR3_BK_N],
@@ -69,10 +54,9 @@ void gctr_3_butterknife(const uint8_t key[GCTR3_BK_KEY_LEN],
         chunk_len = (size_t)GCTR3_BK_N * (size_t)b;
         size_t take = remaining < chunk_len ? remaining : chunk_len;
 
-        inc_be_128(j_enc);                 /* <j> */
+        inc_be_128(j_enc);            
         xor_block_128(tweakey, R, j_enc); /* tweak = R xor <j> */
 
-        /* input block stays fixed as N */
         butterknife_256_encrypt(tweakey, stream, N, (uint8_t)b);
 
         for (size_t i = 0; i < take; ++i)
@@ -83,7 +67,7 @@ void gctr_3_butterknife(const uint8_t key[GCTR3_BK_KEY_LEN],
 }
 
 void gctr_3_butterknife_iv(const uint8_t key[GCTR3_BK_KEY_LEN],
-                           const uint8_t iv[GCTR3_BK_TWO_N], /* iv = R || N */
+                           const uint8_t iv[GCTR3_BK_TWO_N], 
                            const uint8_t *in, size_t len,
                            uint8_t *out,
                            uint8_t num_branches)
@@ -91,9 +75,6 @@ void gctr_3_butterknife_iv(const uint8_t key[GCTR3_BK_KEY_LEN],
     gctr_3_butterknife(key, iv, iv + GCTR3_BK_N, in, len, out, num_branches);
 }
 
-/*
- * Convenience wrapper: use the full ButterKnife width (8 branches = 128 bytes/call).
- */
 void gctr_3_butterknife_iv_full(const uint8_t key[GCTR3_BK_KEY_LEN],
                                 const uint8_t iv[GCTR3_BK_TWO_N],
                                 const uint8_t *in, size_t len,

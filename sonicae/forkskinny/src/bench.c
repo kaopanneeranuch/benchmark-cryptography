@@ -9,19 +9,16 @@
 #include "bench.h"
 #include "internal-forkskinny.h"
 
-/* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
 #define BENCH_ITERS   100
 #define MESSAGE_LEN   100
 
-/* work buffers */
 static uint8_t pt_buf[MESSAGE_LEN];
 static uint8_t ct_buf[MESSAGE_LEN];
 static uint8_t dec_buf[MESSAGE_LEN];
 static uint8_t tag_buf[SS_TAG_BYTES];
 static sonicae_key_t ks;
 
-/* volatile sinks to stop optimization from removing work */
 static volatile uint8_t bench_sink8;
 static volatile uint32_t bench_sink32;
 
@@ -46,7 +43,6 @@ static void print_hex(const char *label, const uint8_t *buf, size_t len)
     printk("\n");
 }
 
-/* ── correctness check ─────────────────────────────────── */
 void verify_correctness(void)
 {
     printk("--- ForkSkinny SonicAE Correctness Check (msg = %d bytes) ---\n",
@@ -87,8 +83,6 @@ void verify_correctness(void)
     printk("--- End correctness ---\n\n");
 }
 
-/* ── individual benchmarks ─────────────────────────────── */
-
 static void bench_auth(void)
 {
     timing_t start, end;
@@ -98,7 +92,6 @@ static void bench_auth(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     forkskinny_sonicae_auth(&ks, NULL, 0, pt_buf, MESSAGE_LEN, tag_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -142,10 +135,8 @@ static void bench_encrypt(void)
     fill_pattern(pt_buf, MESSAGE_LEN);
     memcpy(ks.key, bench_key, SONICAE_KEY_LEN);
 
-    /* precompute tag outside timing */
     forkskinny_sonicae_auth(&ks, NULL, 0, pt_buf, MESSAGE_LEN, tag_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     forkskinny_sonicae_encrypt(&ks, tag_buf, pt_buf, MESSAGE_LEN, ct_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -189,7 +180,6 @@ static void bench_decrypt(void)
     forkskinny_sonicae_encrypt_auth(&ks, NULL, 0,
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -235,7 +225,6 @@ static void bench_auth_check(void)
                                     pt_buf, MESSAGE_LEN, ct_buf, tag_buf);
     forkskinny_sonicae_decrypt(&ks, tag_buf, ct_buf, MESSAGE_LEN, dec_buf);
 
-    /* probe: one un-timed call to count primitive invocations */
     forkskinny_counters_reset();
     (void)forkskinny_sonicae_verify(&ks, NULL, 0, dec_buf, MESSAGE_LEN, tag_buf);
     uint32_t enc_per_op = g_fs128_256_enc_calls;
@@ -271,7 +260,6 @@ static void bench_auth_check(void)
     k_msleep(1);
 }
 
-/* ── top-level entry point ─────────────────────────────── */
 void bench_sonicae_all(void)
 {
     printk("[FORKSKINNY SONICAE] Benchmark  msg=%d bytes  iters=%d\n",
@@ -282,7 +270,6 @@ void bench_sonicae_all(void)
 
     verify_correctness();
 
-    /* keygen bench removed */
     bench_auth();
     bench_encrypt();
     bench_decrypt();

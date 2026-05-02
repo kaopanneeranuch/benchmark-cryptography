@@ -10,7 +10,6 @@
 #include "rijndael_256_gcm.h"
 #include "bench.h"
 
-/* ── configuration ──────────────────────────────────────── */
 #define WARMUP_ITERS   10
 #define BENCH_ITERS   100
 #define MAX_MSG_LEN   4096
@@ -19,7 +18,6 @@
 static const size_t bench_sizes[] = {8, 100, 4096};
 #define NUM_SIZES ((int)(sizeof(bench_sizes) / sizeof(bench_sizes[0])))
 
-/* work buffers (sized to maximum message length) */
 static uint8_t pt_buf[MAX_MSG_LEN];
 static uint8_t ct_buf[MAX_MSG_LEN];
 static uint8_t dec_buf[MAX_MSG_LEN];
@@ -100,7 +98,7 @@ static bool psa_import_aes_key(const uint8_t *key, size_t key_len, size_t key_bi
     return true;
 }
 
-/* ── probe helpers ──────────────────────────────────────── */
+// probe helpers
 
 static uint32_t probe_128_block_calls_auth_only(size_t msg_len)
 {
@@ -194,7 +192,7 @@ static uint32_t probe_rijndael256_block_calls_decrypt_only(size_t msg_len)
     return rijndael256_gcm_get_block_calls();
 }
 
-/* ── correctness ────────────────────────────────────────── */
+// correctness
 
 static void correctness_128(void)
 {
@@ -382,7 +380,7 @@ void verify_correctness(void)
     correctness_rijndael256();
 }
 
-/* ── AES-128 benchmarks ─────────────────────────────────── */
+// AES-128 benchmarks
 
 static void bench_128_auth_only(size_t msg_len)
 {
@@ -577,7 +575,7 @@ static void bench_128_psa_decrypt(size_t msg_len)
     psa_destroy_key(key_id);
 }
 
-/* ── AES-256 benchmarks ─────────────────────────────────── */
+// AES-256 benchmarks
 
 static void bench_256_auth_only(size_t msg_len)
 {
@@ -772,7 +770,7 @@ static void bench_256_psa_decrypt(size_t msg_len)
     psa_destroy_key(key_id);
 }
 
-/* ── Rijndael-256 benchmarks ────────────────────────────── */
+// Rijndael-256 benchmarks
 
 static void bench_rijndael256_auth_only(size_t msg_len)
 {
@@ -894,7 +892,7 @@ static void bench_rijndael256_decrypt_only(size_t msg_len)
            (unsigned long)block_calls);
 }
 
-/* ── top-level entry ───────────────────────────────────── */
+// top-level entry
 
 void bench_gcm_all(void)
 {

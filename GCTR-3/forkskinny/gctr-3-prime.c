@@ -1,4 +1,3 @@
-/* gctr-3-prime.c */
 #include "gctr-3-prime.h"
 #include "internal-forkskinny.h"
 

@@ -14,7 +14,6 @@ void supersonic_256_forkskinny(const uint8_t key[FORKSKINNY_SUPERSONIC_KEY_SIZE]
                                const uint8_t *message,
                                uint32_t message_len);
 
-/* Convenience wrapper that packs out_left || out_right into a single 32-byte tag. */
 void forkskinny_supersonic_tag(const uint8_t key[FORKSKINNY_SUPERSONIC_KEY_SIZE],
                                const uint8_t *message,
                                uint32_t message_len,

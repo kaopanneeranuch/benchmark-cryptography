@@ -1,7 +1,6 @@
 #include "rijndael256.h"
 #include <string.h>
 
-/* Nb=8, Nk=8, Nr=14 */
 #define R256_NB  8
 #define R256_NK  8
 #define R256_NR  14
@@ -25,7 +24,6 @@ static const uint8_t sbox[256] = {
     0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
 };
 
-/* Rcon[1..14]: GF(2^8) powers of 2, indexed as rcon[i/NK - 1] */
 static const uint8_t rcon[14] = {
     0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1b,0x36,0x6c,0xd8,0xab,0x4d
 };
@@ -118,7 +116,6 @@ void rijndael256_encrypt(const rijndael256_ctx_t *ctx,
 {
     uint8_t s[4][R256_NB];
 
-    /* Load state column-major: in[4*c + r] -> s[r][c] */
     for (int c = 0; c < R256_NB; c++)
         for (int r = 0; r < 4; r++)
             s[r][c] = in[4*c + r];

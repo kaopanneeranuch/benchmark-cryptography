@@ -17,7 +17,7 @@ static void xor_block_128(uint8_t out[GCTR3_N],
         out[i] = (uint8_t)(a[i] ^ b[i]);
 }
 
-/* Increment a 128-bit big-endian counter in place. */
+/* Increment a 128-bit big-endian counter */
 static void inc_be_128(uint8_t x[GCTR3_N])
 {
     for (int i = GCTR3_N - 1; i >= 0; --i) {
@@ -34,7 +34,6 @@ static void inc_be_128(uint8_t x[GCTR3_N])
  * R: 16-byte random IV part
  * N: 16-byte nonce/input part
  *
- * Encryption and decryption are the same function.
  */
 void gctr_3_forkskinny(const uint8_t key[GCTR3_KEY_LEN],
                        const uint8_t R[GCTR3_N],
@@ -42,8 +41,8 @@ void gctr_3_forkskinny(const uint8_t key[GCTR3_KEY_LEN],
                        const uint8_t *in, size_t len,
                        uint8_t *out)
 {
-    uint8_t tk[GCTR3_TWO_N];         /* tweak || key */
-    uint8_t j_enc[GCTR3_N];          /* <j> */
+    uint8_t tk[GCTR3_TWO_N];         
+    uint8_t j_enc[GCTR3_N];   
     uint8_t stream[GCTR3_TWO_N];
     size_t offset = 0;
 

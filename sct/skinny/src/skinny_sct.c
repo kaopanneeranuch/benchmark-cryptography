@@ -83,10 +83,6 @@ void skinny_sct_ctrt(const sct_key_t *ks,
     }
 }
 
-/* keygen removed -- callers should initialize the key structure directly, e.g.
- * memcpy(ks.key, bench_key, SCT_KEY_LEN);
- */
-
 /*
  * EPWC:
  *   auth := E^(2,0)(N) xor E^(2,1)(N)
@@ -151,8 +147,6 @@ void skinny_sct_hash(const sct_key_t *ks,
             auth[i] ^= tmp[i];
     }
 
-    /* Message: complete blocks use prefix 4, final partial uses prefix 5.
-       Counters are 1,2,3,... */
     off = 0;
     while (off + SCT_BLOCK_LEN < mlen)
     {

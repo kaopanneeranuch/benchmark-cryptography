@@ -7,16 +7,8 @@
 #define GCTR3P_BK_N         16u
 #define GCTR3P_BK_TWO_N     32u
 #define GCTR3P_BK_KEY_LEN   16u
-#define GCTR3P_BK_BRANCHES   8u   /* 8 branches = 128 bytes per call (matches BUTTERKNIFE_MAX_BRANCHES) */
+#define GCTR3P_BK_BRANCHES   8u   
 
-/*
- * GCTR'-2-3 over ButterKnife, using:
- *   - tag = R || N   (R = first 16 bytes, N = second 16 bytes)
- *   - T_j = (R xor <j>) with domain bits forced to 10
- *   - X_j = N
- *
- * Encryption and decryption are identical.
- */
 void gctr_3_prime_butterknife(const uint8_t key[GCTR3P_BK_KEY_LEN],
                               const uint8_t tag[GCTR3P_BK_TWO_N],
                               const uint8_t *in, size_t len,

@@ -23,15 +23,7 @@ static void inc_be_128(uint8_t x[GCTR3P_BK_N])
     }
 }
 
-/*
- * Force the two domain bits to 10.
- *
- * This matches your earlier ForkSkinny helper:
- *   tweak[0] &= 0x3F;
- *   tweak[0] |= 0x80;
- *
- * If your bit numbering/serialization is different, adjust this helper.
- */
+// Force the two domain bits to 10.
 static void gctr3p_bk_set_domain_10(uint8_t tweak[GCTR3P_BK_N])
 {
     tweak[0] &= 0x3Fu;
@@ -44,9 +36,9 @@ void gctr_3_prime_butterknife_rn(const uint8_t key[GCTR3P_BK_KEY_LEN],
                                  const uint8_t *in, size_t len,
                                  uint8_t *out)
 {
-    uint8_t tweakey[GCTR3P_BK_TWO_N];                  /* tweak || key */
-    uint8_t j_enc[GCTR3P_BK_N];                        /* <j> */
-    uint8_t stream[GCTR3P_BK_N * GCTR3P_BK_BRANCHES]; /* 32 bytes */
+    uint8_t tweakey[GCTR3P_BK_TWO_N];                 
+    uint8_t j_enc[GCTR3P_BK_N];                       
+    uint8_t stream[GCTR3P_BK_N * GCTR3P_BK_BRANCHES]; 
     size_t offset = 0u;
 
     memset(j_enc, 0, sizeof(j_enc));

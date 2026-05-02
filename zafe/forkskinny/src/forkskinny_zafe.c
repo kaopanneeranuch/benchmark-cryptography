@@ -15,7 +15,7 @@
 #define ZT_BYTES     15
 #define ZBLOCK_LEN   (N + ZT_BYTES)
 
-/* ----------------------------- small helpers ----------------------------- */
+// helper
 
 static void ct_memzero(void *p, size_t n)
 {
@@ -34,67 +34,7 @@ static int ct_memcmp_eq(const uint8_t *a, const uint8_t *b, size_t n)
     return diff == 0;
 }
 
-// static void xor_into(uint8_t *dst, const uint8_t *src, size_t len)
-// {
-//     for (size_t i = 0; i < len; ++i) {
-//         dst[i] ^= src[i];
-//     }
-// }
-
-// static size_t pad10_len(size_t len, size_t block_len)
-// {
-//     return len + 1 + ((block_len - ((len + 1) % block_len)) % block_len);
-// }
-
-// static size_t pad10(uint8_t *out, const uint8_t *in, size_t len, size_t block_len)
-// {
-//     size_t padded_len = pad10_len(len, block_len);
-
-//     if (len > 0 && in != NULL) {
-//         memcpy(out, in, len);
-//     }
-
-//     out[len] = 0x80;
-//     if (padded_len > len + 1) {
-//         memset(out + len + 1, 0, padded_len - len - 1);
-//     }
-
-//     return padded_len;
-// }
-
-// static void encode_bitlen_be128(uint8_t out[N], size_t len_bytes)
-// {
-//     uint64_t hi = ((uint64_t)len_bytes) >> 61;
-//     uint64_t lo = ((uint64_t)len_bytes) << 3;
-
-//     memset(out, 0, N);
-
-//     for (int i = 7; i >= 0; --i) {
-//         out[i] = (uint8_t)(hi & 0xFFU);
-//         hi >>= 8;
-//     }
-//     for (int i = 15; i >= 8; --i) {
-//         out[i] = (uint8_t)(lo & 0xFFU);
-//         lo >>= 8;
-//     }
-// }
-
-// /* doubling in GF(2^128), polynomial x^128 + x^7 + x^2 + x + 1 */
-// static void gf_mul_x_n(uint8_t x[N])
-// {
-//     uint8_t carry = (uint8_t)(x[0] >> 7);
-
-//     for (int i = 0; i < N - 1; ++i) {
-//         x[i] = (uint8_t)((x[i] << 1) | (x[i + 1] >> 7));
-//     }
-//     x[N - 1] <<= 1;
-
-//     if (carry) {
-//         x[N - 1] ^= 0x87U;
-//     }
-// }
-
-/* ----------------------------- ZHASH / ZMAC / ZFMac (streaming, USART-based) ----------------------------- */
+/* ----------------------------- ZHASH / ZMAC / ZFMac ----------------------------- */
 
 /* Map pasted-code macros to local definitions */
 #ifndef KS
@@ -124,15 +64,6 @@ typedef struct {
     unsigned char v[TS];
 } MacChains;
 
-static void skinny_encrypt(unsigned char *output, unsigned char *input, unsigned char *key){
-#if BS == 16
-    forkskinny_128_256_encrypt(key, output, NULL, input);
-#else
-    /* fallback if 64-bit variant required */
-    /* call appropriate ForkSkinny 64/192 primitive if available */
-#endif
-}
-
 static void arrXOR(unsigned char *out, unsigned char *right, uint16_t len){
     for(uint16_t i = 0; i < len; ++i){
         out[i] ^= right[i];
@@ -160,7 +91,7 @@ static void ZHASH(ZmacStruct *pZmac, MacChains *pChains, unsigned char prpol){
     arrXOR(pZmac->tweakey + KS, pZmac->mask_r, MIN(TS-1, BS));
 
     pZmac->tweakey[KS + TS-1] = 0x08;
-    skinny_encrypt(cmask, pZmac->message, pZmac->tweakey);
+    forkskinny_128_256_encrypt(pZmac->tweakey, cmask, NULL, pZmac->message);
 
     arrXOR(pChains->u, cmask, BS);
     arrMULT(pChains->u, prpol, BS);
@@ -176,18 +107,18 @@ static void ZFIN(ZmacStruct *pZmac, uint8_t fin){
     unsigned char tmp[BS];
     /* Y_1 */
     pZmac->tweakey[KS+TS-1] = fin;
-    skinny_encrypt(pZmac->out, pZmac->message, pZmac->tweakey);
+    forkskinny_128_256_encrypt(pZmac->tweakey, pZmac->out, NULL, pZmac->message);
 
     ++pZmac->tweakey[KS+TS-1];
-    skinny_encrypt(tmp, pZmac->message, pZmac->tweakey);
+    forkskinny_128_256_encrypt(pZmac->tweakey, tmp, NULL, pZmac->message);
     arrXOR(pZmac->out, tmp, BS);
 
     /* Y_2 */
     ++pZmac->tweakey[KS+TS-1];
-    skinny_encrypt(&pZmac->out[BS], pZmac->message, pZmac->tweakey);
+    forkskinny_128_256_encrypt(pZmac->tweakey, &pZmac->out[BS], NULL, pZmac->message);
 
     ++pZmac->tweakey[KS+TS-1];
-    skinny_encrypt(tmp, pZmac->message, pZmac->tweakey);
+    forkskinny_128_256_encrypt(pZmac->tweakey, tmp, NULL, pZmac->message);
     arrXOR(&pZmac->out[BS], tmp, BS);
 }
 
@@ -233,10 +164,10 @@ static void ZMAC_encrypt(unsigned char *out_left, unsigned char *out_right, unsi
 #endif
 
     Zmac.tweakey[KS+TS-1] = 0x09;
-    skinny_encrypt(Zmac.mask_l, Zmac.message, Zmac.tweakey);
+    forkskinny_128_256_encrypt(Zmac.tweakey, Zmac.mask_l, NULL, Zmac.message);
 
     Zmac.tweakey[KS+TS-2] = 0x01;
-    skinny_encrypt(Zmac.mask_r, Zmac.message, Zmac.tweakey);
+    forkskinny_128_256_encrypt(Zmac.tweakey, Zmac.mask_r, NULL, Zmac.message);
 
     send_USART_bytes(&pbsize,1,cc);
     for(uint16_t i = 0;i<nP_complete; ++i){

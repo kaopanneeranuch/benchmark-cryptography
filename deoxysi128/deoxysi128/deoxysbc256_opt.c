@@ -1,10 +1,6 @@
 /*
  * Deoxys-BC-256 optimised — encryption only, 14 rounds, no BC-384 code paths.
- *
  * Tables are the standard AES T-tables (same data as tweakableBC.c).
- * Declaring them here (non-static) lets the linker deduplicate when both
- * translation units are linked together.  If you need to avoid symbol
- * conflicts rename them via COMPILE_DEFINITIONS in CMakeLists.
  */
 
 #include "deoxysbc256_opt.h"
@@ -277,13 +273,9 @@ static inline void tk2_step(uint8_t t[16])
     (w3) = GETU32((t1)+12) ^ GETU32((t2)+12);             \
 } while(0)
 
-/* ================================================================== */
-/* Public API                                                           */
-/* ================================================================== */
+// Public API
 
-/* ------------------------------------------------------------------ */
-/* 1. Precomputed-TK1 API                                              */
-/* ------------------------------------------------------------------ */
+// Precomputed-TK1 API
 
 void deoxysbc256_precompute_tk1(deoxysbc256_ctx_t *ctx, const uint8_t tk1[16])
 {
@@ -340,10 +332,8 @@ void deoxysbc256_encrypt(const deoxysbc256_ctx_t *ctx,
     PUTU32(ct+8,  s2); PUTU32(ct+12, s3);
 }
 
-/* ------------------------------------------------------------------ */
-/* 2. Full-tweakey fused API (key schedule interleaved with encryption) */
+/* Full-tweakey fused API (key schedule interleaved with encryption) */
 /* No rk[] array — STK words are computed and consumed per round.      */
-/* ------------------------------------------------------------------ */
 
 void deoxysbc256_encrypt_full(const uint8_t tk[32],
                               const uint8_t pt[16],
@@ -364,7 +354,7 @@ void deoxysbc256_encrypt_full(const uint8_t tk[32],
     s2 = GETU32(pt+8)  ^ w2;
     s3 = GETU32(pt+12) ^ w3;
 
-    /* Rounds 1-14 (alternating s→t and t→s) */
+    /* Rounds 1-14 (alternating s->t and t->s) */
     STK_WORDS(tk1,tk2,1,w0,w1,w2,w3); tk1_step(tk1); tk2_step(tk2);
     AES_ROUND(s0,s1,s2,s3, t0,t1,t2,t3, w0,w1,w2,w3);
 

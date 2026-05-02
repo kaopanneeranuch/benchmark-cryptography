@@ -19,7 +19,7 @@ void aesTweakEncrypt_deoxysi128_ref(uint32_t tweakey_size,
                                     const uint8_t key[],
                                     uint8_t ct[16]);
 
-/* Deoxys-I-128 custom implementation (deoxysi/) */
+// (deoxysi/)
 void deoxys_I_aead_encrypt_128(const uint8_t *message, size_t m_len,
                                const uint8_t *key, const uint8_t *nonce,
                                uint8_t *ciphertext, size_t *c_len);
@@ -27,7 +27,7 @@ int deoxys_I_aead_decrypt_128(uint8_t *message, size_t *m_len,
                               const uint8_t *key, const uint8_t *nonce,
                               const uint8_t *ciphertext, size_t c_len);
 
-/* Deoxys-I-128 reference implementation (deoxysi128/deoxysi128/ref, renamed) */
+// (deoxysi128/deoxysi128/ref)
 void deoxys128_ref_aead_encrypt(const uint8_t *ass_data, size_t ass_data_len,
                                 const uint8_t *message, size_t m_len,
                                 const uint8_t *key, const uint8_t *nonce,
@@ -37,7 +37,7 @@ int deoxys128_ref_aead_decrypt(const uint8_t *ass_data, size_t ass_data_len,
                                const uint8_t *key, const uint8_t *nonce,
                                const uint8_t *ciphertext, size_t c_len);
 
-/* Deoxys-I-256 reference implementation (deoxysi256/deoxysi256/ref) */
+// (deoxysi256/deoxysi256/ref)
 void deoxys_aead_encrypt(const uint8_t *ass_data, size_t ass_data_len,
                          const uint8_t *message, size_t m_len,
                          const uint8_t *key, const uint8_t *nonce,
@@ -83,9 +83,6 @@ static void print_hex(const char *label, const uint8_t *data, size_t len)
     printk("\n");
 }
 
-/* ------------------------------------------------------------------ */
-/* Helper: run one benchmark, print result                             */
-/* ------------------------------------------------------------------ */
 #define BENCH_BEGIN(name_)                                  \
     do {                                                    \
         const char *_name = (name_);                        \
@@ -112,12 +109,6 @@ static void print_hex(const char *label, const uint8_t *data, size_t len)
                _total_ns / BENCH_ITERS);                    \
     } while (0)
 
-/* ------------------------------------------------------------------ */
-/* Deoxys-I AEAD comparison                                            */
-/*   deoxysi256/ref  →  Deoxys-I-256  (key=32 B, nonce=8 B)          */
-/*   deoxysi         →  Deoxys-I-128  (key=16 B, nonce=8 B, SKINNY)  */
-/*   deoxysi128/ref  →  Deoxys-I-128  (key=16 B, nonce=8 B, Deoxys-BC)*/
-/* ------------------------------------------------------------------ */
 static void verify_deoxys_aead(void)
 {
     uint8_t ct256[32];   /* 16-byte CT + 16-byte tag */
@@ -206,8 +197,6 @@ static void verify_deoxys_aead(void)
         printk("\n");
     }
 }
-
-/* ------------------------------------------------------------------ */
 
 static void bench_skinny128_256(void)
 {

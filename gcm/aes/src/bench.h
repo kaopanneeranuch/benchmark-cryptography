@@ -4,4 +4,4 @@
 void verify_correctness(void);
 void bench_gcm_all(void);
 
-#endif /* BENCH_H */
+#endif

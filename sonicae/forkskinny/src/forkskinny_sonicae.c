@@ -6,14 +6,11 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* keygen removed: callers should initialize `sonicae_key_t` directly (memcpy) */
-
 void forkskinny_sonicae_auth(const sonicae_key_t *ks,
                              const uint8_t *ad, size_t adlen,
                              const uint8_t *pt, size_t ptlen,
                              uint8_t tag[SS_TAG_BYTES])
 {
-    /* current build only uses AD = empty */
     (void)ad;
     (void)adlen;
 

@@ -14,7 +14,6 @@ extern uint32_t g_rijndael256_block_calls;
 void rijndael256_gcm_counters_reset(void);
 uint32_t rijndael256_gcm_get_block_calls(void);
 
-/* Rijndael-256-GCM */
 void rijndael256_gcm_ctr_crypt(const uint8_t key[RIJNDAEL256_KEY_LEN],
                                const uint8_t iv[RIJNDAEL256_GCM_NONCE_LEN],
                                const uint8_t *in, size_t len,
@@ -46,4 +45,4 @@ int rijndael256_gcm_decrypt_verify(const uint8_t key[RIJNDAEL256_KEY_LEN],
                                    const uint8_t tag[RIJNDAEL256_GCM_TAG_LEN],
                                    uint8_t *pt);
 
-#endif /* RIJNDAEL_256_GCM_H */
+#endif
