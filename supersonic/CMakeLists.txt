@@ -5,20 +5,15 @@ project(supersonic)
 
 zephyr_include_directories(
     ../BC__Butterknife/include
-    ../GCTR-3/forkskinny
-    ../GCTR-3/butterknife
     ../forkskinny-opt32
     src/include
 )
 
-target_sources(app PRIVATE 
+target_sources(app PRIVATE
     src/main.c
     src/supersonic_butterknife.c
     src/supersonic_forkskinny.c
-    ../GCTR-3/forkskinny/gctr-3-fs.c
-    ../GCTR-3/forkskinny/gctr-3-prime.c
-    ../GCTR-3/butterknife/gctr-3-bk.c
-    ../GCTR-3/butterknife/gctr-3-prime-bk.c
+    src/gctr3.c
     ../BC__Butterknife/source/butterknife256_tks.c
     ../BC__Butterknife/source/butterknife256.c
     ../forkskinny-opt32/internal-forkskinny.c
