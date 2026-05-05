@@ -137,6 +137,144 @@ static void bench_size(uint32_t mlen)
     print_counters("skinny", oneleg, "butterknife", twoleg);
 }
 
+/* =========================================================================
+ * Verify helpers
+ * ========================================================================= */
+
+static void print_hex(const char *label, const uint8_t *buf, uint8_t len)
+{
+    printk("  %-22s: ", label);
+    for (uint8_t i = 0; i < len; i++)
+        printk("%02x ", buf[i]);
+    printk("\n");
+}
+
+/* Verify + averaged timing for 16-byte-output variants. */
+static void bench_verify_16(const char *name, supersonic_fn_t fn, uint32_t mlen)
+{
+    uint8_t ref_L[16], ref_R[16];
+    uint8_t chk_L[16], chk_R[16];
+    timing_t t0, t1;
+    uint64_t total_cyc, total_ns;
+    int ok;
+
+    fill_pattern(msg_buf, mlen);
+    fn(bench_key, ref_L, ref_R, msg_buf, mlen);
+
+    printk("\n=== Verify: %-30s [%u B] ===\n", name, mlen);
+    print_hex("tag_L", ref_L, 16);
+    print_hex("tag_R", ref_R, 16);
+
+    /* same message — must MATCH */
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        fn(bench_key, chk_L, chk_R, msg_buf, mlen);
+    total_cyc = total_ns = 0;
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        t0 = timing_counter_get();
+        fn(bench_key, chk_L, chk_R, msg_buf, mlen);
+        t1 = timing_counter_get();
+        uint64_t c = timing_cycles_get(&t0, &t1);
+        total_cyc += c;
+        total_ns  += timing_cycles_to_ns(c);
+    }
+    ok = (memcmp(chk_L, ref_L, 16) == 0 && memcmp(chk_R, ref_R, 16) == 0);
+    printk("  verify(same msg):    [%s] %-20s  %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
+           ok ? "PASS" : "FAIL",
+           ok ? "MATCH" : "MISMATCH (wrong!)",
+           total_cyc / BENCH_ITERS, total_ns / BENCH_ITERS);
+
+    /* tampered message — must MISMATCH */
+    msg_buf[mlen / 2] ^= 0x01;
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        fn(bench_key, chk_L, chk_R, msg_buf, mlen);
+    total_cyc = total_ns = 0;
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        t0 = timing_counter_get();
+        fn(bench_key, chk_L, chk_R, msg_buf, mlen);
+        t1 = timing_counter_get();
+        uint64_t c = timing_cycles_get(&t0, &t1);
+        total_cyc += c;
+        total_ns  += timing_cycles_to_ns(c);
+    }
+    ok = (memcmp(chk_L, ref_L, 16) != 0 || memcmp(chk_R, ref_R, 16) != 0);
+    printk("  verify(tampered):    [%s] %-20s  %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
+           ok ? "PASS" : "FAIL",
+           ok ? "MISMATCH (correct)" : "MATCH (wrong!)",
+           total_cyc / BENCH_ITERS, total_ns / BENCH_ITERS);
+    msg_buf[mlen / 2] ^= 0x01;  /* restore */
+
+    sink ^= chk_L[0] ^ chk_R[0];
+}
+
+/* Verify + averaged timing for supersonic_192_star (8-byte outputs). */
+static void bench_verify_192(uint32_t mlen)
+{
+    uint8_t ref_L[8], ref_R[8];
+    uint8_t chk_L[8], chk_R[8];
+    timing_t t0, t1;
+    uint64_t total_cyc, total_ns;
+    int ok;
+
+    fill_pattern(msg_buf, mlen);
+    supersonic_192_star(bench_key, ref_L, ref_R, msg_buf, mlen);
+
+    printk("\n=== Verify: %-30s [%u B] ===\n", "supersonic_192_star", mlen);
+    print_hex("tag_L", ref_L, 8);
+    print_hex("tag_R", ref_R, 8);
+
+    /* same message — must MATCH */
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        supersonic_192_star(bench_key, chk_L, chk_R, msg_buf, mlen);
+    total_cyc = total_ns = 0;
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        t0 = timing_counter_get();
+        supersonic_192_star(bench_key, chk_L, chk_R, msg_buf, mlen);
+        t1 = timing_counter_get();
+        uint64_t c = timing_cycles_get(&t0, &t1);
+        total_cyc += c;
+        total_ns  += timing_cycles_to_ns(c);
+    }
+    ok = (memcmp(chk_L, ref_L, 8) == 0 && memcmp(chk_R, ref_R, 8) == 0);
+    printk("  verify(same msg):    [%s] %-20s  %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
+           ok ? "PASS" : "FAIL",
+           ok ? "MATCH" : "MISMATCH (wrong!)",
+           total_cyc / BENCH_ITERS, total_ns / BENCH_ITERS);
+
+    /* tampered message — must MISMATCH */
+    msg_buf[mlen / 2] ^= 0x01;
+    for (int i = 0; i < WARMUP_ITERS; i++)
+        supersonic_192_star(bench_key, chk_L, chk_R, msg_buf, mlen);
+    total_cyc = total_ns = 0;
+    for (int i = 0; i < BENCH_ITERS; i++) {
+        t0 = timing_counter_get();
+        supersonic_192_star(bench_key, chk_L, chk_R, msg_buf, mlen);
+        t1 = timing_counter_get();
+        uint64_t c = timing_cycles_get(&t0, &t1);
+        total_cyc += c;
+        total_ns  += timing_cycles_to_ns(c);
+    }
+    ok = (memcmp(chk_L, ref_L, 8) != 0 || memcmp(chk_R, ref_R, 8) != 0);
+    printk("  verify(tampered):    [%s] %-20s  %12" PRIu64 " cycles | %12" PRIu64 " ns\n",
+           ok ? "PASS" : "FAIL",
+           ok ? "MISMATCH (correct)" : "MATCH (wrong!)",
+           total_cyc / BENCH_ITERS, total_ns / BENCH_ITERS);
+    msg_buf[mlen / 2] ^= 0x01;  /* restore */
+
+    sink ^= chk_L[0] ^ chk_R[0];
+}
+
+static void verify_size(uint32_t mlen)
+{
+    printk("\n--- Verify [%u bytes] ---", mlen);
+
+    bench_verify_16("supersonic_256_forkskinny",    supersonic_256_star,                   mlen);
+    bench_verify_16("supersonic_384_forkskinny",    supersonic_384_star,                   mlen);
+    bench_verify_192(mlen);
+    bench_verify_16("supersonic_256_bk_deoxys",     supersonic_256_butterknife_deoxys,     mlen);
+    bench_verify_16("supersonic_256_bk_deoxys_opt", supersonic_256_butterknife_deoxys_opt, mlen);
+    bench_verify_16("supersonic_256_bk_skinny",     supersonic_256_butterknife_skinny,     mlen);
+}
+
 int main(void)
 {
     timing_init();
@@ -149,6 +287,14 @@ int main(void)
     bench_size(8);
     bench_size(100);
     bench_size(4096);
+
+    printk("\n\n=== Supersonic Star Verification ===\n");
+    printk("format: tag hex | verify result | avg cycles/ns (%d iters, %d warmup)\n",
+           BENCH_ITERS, WARMUP_ITERS);
+
+    verify_size(8);
+    verify_size(100);
+    verify_size(4096);
 
     printk("\nBenchmark done (sink=%u).\n", sink);
     return 0;

@@ -192,6 +192,14 @@ static uint32_t probe_rijndael256_block_calls_decrypt_only(size_t msg_len)
     return rijndael256_gcm_get_block_calls();
 }
 
+static uint32_t probe_rijndael256_block_calls_decrypt_verify(size_t msg_len)
+{
+    rijndael256_gcm_counters_reset();
+    (void)rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                         ad_buf, AD_LEN, ct_buf, msg_len, tag_buf_r256, dec_buf);
+    return rijndael256_gcm_get_block_calls();
+}
+
 // correctness
 
 static void correctness_128(void)
@@ -350,7 +358,8 @@ static void correctness_rijndael256(void)
     uint8_t our_ct[sizeof(test_pt) - 1U];
     uint8_t our_tag[RIJNDAEL256_GCM_TAG_LEN];
     uint8_t our_dec[sizeof(test_pt)];
-    int rc;
+    uint8_t tampered_ct[sizeof(test_pt) - 1U];
+    int rc, rc_tamper;
 
     printk("[Rijndael-256-GCM]\n");
     printk("  PT: \"%s\"\n", test_pt);
@@ -368,8 +377,20 @@ static void correctness_rijndael256(void)
     printk("  [Our implementation]\n");
     print_hex("    CT:  ", our_ct, sizeof(test_pt) - 1U);
     print_hex("    TAG: ", our_tag, RIJNDAEL256_GCM_TAG_LEN);
-    printk("    DEC: %s\n", our_dec);
-    printk("    verify: %s\n\n", rc == 1 ? "OK" : "FAIL");
+    printk("    DEC: \"%s\"\n", our_dec);
+    printk("    verify(same):    [%s] %s\n",
+           rc == 1 ? "PASS" : "FAIL",
+           rc == 1 ? "MATCH" : "MISMATCH (wrong!)");
+
+    memcpy(tampered_ct, our_ct, sizeof(test_pt) - 1U);
+    tampered_ct[0] ^= 0x01;
+    rc_tamper = rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                               NULL, 0,
+                                               tampered_ct, sizeof(test_pt) - 1U,
+                                               our_tag, our_dec);
+    printk("    verify(tampered):[%s] %s\n\n",
+           rc_tamper == 0 ? "PASS" : "FAIL",
+           rc_tamper == 0 ? "MISMATCH (correct)" : "MATCH (wrong!)");
 }
 
 void verify_correctness(void)
@@ -892,6 +913,40 @@ static void bench_rijndael256_decrypt_only(size_t msg_len)
            (unsigned long)block_calls);
 }
 
+static void bench_rijndael256_decrypt_verify(size_t msg_len)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+    uint32_t block_calls;
+    int rc = 1;
+
+    fill_pattern(pt_buf, msg_len);
+    fill_pattern(ad_buf, AD_LEN);
+    rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                 ad_buf, AD_LEN, pt_buf, msg_len, ct_buf, tag_buf_r256);
+    block_calls = probe_rijndael256_block_calls_decrypt_verify(msg_len);
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        (void)rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                             ad_buf, AD_LEN, ct_buf, msg_len, tag_buf_r256, dec_buf);
+    }
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        start = timing_counter_get();
+        rc = rijndael256_gcm_decrypt_verify(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                            ad_buf, AD_LEN, ct_buf, msg_len, tag_buf_r256, dec_buf);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c += c; total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-16s: %10llu cycles  |  %10llu ns  [block/op %lu]  verify=%s\n",
+           "decrypt+verify",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS),
+           (unsigned long)block_calls,
+           rc == 1 ? "OK" : "FAIL");
+}
+
 // top-level entry
 
 void bench_gcm_all(void)
@@ -934,6 +989,7 @@ void bench_gcm_all(void)
         bench_rijndael256_verify_only(msg_len);
         bench_rijndael256_encrypt_only(msg_len);
         bench_rijndael256_decrypt_only(msg_len);
+        bench_rijndael256_decrypt_verify(msg_len);
         printk("\n");
     }
 
