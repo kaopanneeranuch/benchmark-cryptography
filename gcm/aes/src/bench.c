@@ -192,6 +192,14 @@ static uint32_t probe_rijndael256_block_calls_decrypt_only(size_t msg_len)
     return rijndael256_gcm_get_block_calls();
 }
 
+static uint32_t probe_rijndael256_block_calls_encrypt_auth(size_t msg_len)
+{
+    rijndael256_gcm_counters_reset();
+    rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                 ad_buf, AD_LEN, pt_buf, msg_len, ct_buf, tag_buf_r256);
+    return rijndael256_gcm_get_block_calls();
+}
+
 static uint32_t probe_rijndael256_block_calls_decrypt_verify(size_t msg_len)
 {
     rijndael256_gcm_counters_reset();
@@ -913,6 +921,35 @@ static void bench_rijndael256_decrypt_only(size_t msg_len)
            (unsigned long)block_calls);
 }
 
+static void bench_rijndael256_encrypt_auth(size_t msg_len)
+{
+    timing_t start, end;
+    uint64_t total_c = 0, total_ns = 0;
+    uint32_t block_calls;
+
+    fill_pattern(pt_buf, msg_len);
+    fill_pattern(ad_buf, AD_LEN);
+    block_calls = probe_rijndael256_block_calls_encrypt_auth(msg_len);
+
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                     ad_buf, AD_LEN, pt_buf, msg_len, ct_buf, tag_buf_r256);
+    }
+    for (int i = 0; i < BENCH_ITERS; ++i) {
+        start = timing_counter_get();
+        rijndael256_gcm_encrypt_auth(bench_key_rijndael256, bench_nonce_rijndael256, RIJNDAEL256_GCM_NONCE_LEN,
+                                     ad_buf, AD_LEN, pt_buf, msg_len, ct_buf, tag_buf_r256);
+        end = timing_counter_get();
+        uint64_t c = timing_cycles_get(&start, &end);
+        total_c += c; total_ns += timing_cycles_to_ns(c);
+    }
+
+    printk("  %-16s: %10llu cycles  |  %10llu ns  [block/op %lu]\n", "encrypt+auth",
+           (unsigned long long)(total_c / BENCH_ITERS),
+           (unsigned long long)(total_ns / BENCH_ITERS),
+           (unsigned long)block_calls);
+}
+
 static void bench_rijndael256_decrypt_verify(size_t msg_len)
 {
     timing_t start, end;
@@ -989,6 +1026,7 @@ void bench_gcm_all(void)
         bench_rijndael256_verify_only(msg_len);
         bench_rijndael256_encrypt_only(msg_len);
         bench_rijndael256_decrypt_only(msg_len);
+        bench_rijndael256_encrypt_auth(msg_len);
         bench_rijndael256_decrypt_verify(msg_len);
         printk("\n");
     }
