@@ -3,3 +3,4 @@ build/
 **/build/%
 .claude/
 __pycache__/
+*.exe

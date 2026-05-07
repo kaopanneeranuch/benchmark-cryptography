@@ -2,6 +2,6 @@
 #define BENCH_H
 
 void verify_correctness(void);
-void bench_zafe_all(void);
+void bench_sct_all(void);
 
 #endif
